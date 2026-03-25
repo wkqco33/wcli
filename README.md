@@ -5,6 +5,7 @@ Cobra에서 영감을 받아 제작되었으며, 복잡성을 줄이고 직관�
 추가적으로 Python의 `rich` 라이브러리에서 영감을 받은 **스타일링 텍스트 출력**을 지원합니다.
 
 ## 특징
+
 - **성능 최우선**: 무거운 파싱 라이브러리 없이 단순하고 효율적인 구조
 - **데이터 중심**: 직관적인 `Command` 구조체를 통한 명령어 트리 구성 및 플래그 바인딩
 - **명시적 에러 처리**: 숨겨진 패닉 없이 명확한 에러 반환
@@ -16,37 +17,37 @@ Cobra에서 영감을 받아 제작되었으며, 복잡성을 줄이고 직관�
 package main
 
 import (
-	"fmt"
-	"os"
+ "fmt"
+ "os"
 
-	"github.com/seoyc/wcli"
-	"github.com/seoyc/wcli/rich"
+ "github.com/seoyc/wcli"
+ "github.com/seoyc/wcli/rich"
 )
 
 func main() {
-	var verbose bool
-	var name string
+ var verbose bool
+ var name string
 
-	rootCmd := &wcli.Command{
-		Use:   "app",
-		Short: "앱 설명",
-		Run: func(ctx *wcli.Context) error {
-			if verbose {
-				rich.Println("[blue]상세 모드로 실행합니다.[/blue]")
-			}
-			rich.Println("[green]안녕하세요, %s님![/green]", name)
-			return nil
-		},
-	}
+ rootCmd := &wcli.Command{
+  Use:   "app",
+  Short: "앱 설명",
+  Run: func(ctx *wcli.Context) error {
+   if verbose {
+    rich.Println("[blue]상세 모드로 실행합니다.[/blue]")
+   }
+   rich.Println("[green]안녕하세요, %s님![/green]", name)
+   return nil
+  },
+ }
 
-	// 플래그 설정
-	rootCmd.Flags().BoolVar(&verbose, "verbose", "v", false, "상세 출력 활성화")
-	rootCmd.Flags().StringVar(&name, "name", "n", "User", "사용자 이름")
+ // 플래그 설정
+ rootCmd.Flags().BoolVar(&verbose, "verbose", "v", false, "상세 출력 활성화")
+ rootCmd.Flags().StringVar(&name, "name", "n", "User", "사용자 이름")
 
-	if err := rootCmd.Execute(os.Args[1:]); err != nil {
-		rich.Println("[red]Error: %v[/red]", err)
-		os.Exit(1)
-	}
+ if err := rootCmd.Execute(os.Args[1:]); err != nil {
+  rich.Println("[red]Error: %v[/red]", err)
+  os.Exit(1)
+ }
 }
 ```
 
