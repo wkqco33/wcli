@@ -27,6 +27,16 @@ func TestMarkup(t *testing.T) {
 			input:    `\[red] 일반 텍스트`,
 			expected: "[red] 일반 텍스트",
 		},
+		{
+			name:     "중첩 태그 - 닫힘 순서가 다를 때도 정상 동작",
+			input:    "[bold][red]text[/bold][/red]",
+			expected: "\033[1m\033[31mtext",
+		},
+		{
+			name:     "닫힘 태그 이름으로 정확히 pop",
+			input:    "[bold][red]text[/red] still bold[/bold]",
+			expected: "\033[1m\033[31mtext",
+		},
 	}
 
 	for _, tt := range tests {
