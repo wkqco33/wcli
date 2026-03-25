@@ -4,11 +4,15 @@ import (
 	"context"
 	"errors"
 	"fmt"
+
+	"github.com/seoyc/wcli/rich"
 )
 
 var (
 	// ErrCommandNotFound 하위 명령어를 찾을 수 없을 때 반환하는 에러
 	ErrCommandNotFound = errors.New("command not found")
+	// ErrHelp 도움말 요청 시 반환하는 에러
+	ErrHelp = errors.New("help requested")
 )
 
 // Context 명령어 실행 시 전달되는 컨텍스트
@@ -23,7 +27,13 @@ type Command struct {
 	Short string
 	Long  string
 
-	Run func(ctx *Context) error
+	// 실행 훅: PreRun → Run → PostRun 순서로 호출됨
+	PreRun  func(ctx *Context) error
+	Run     func(ctx *Context) error
+	PostRun func(ctx *Context) error
+
+	// SilenceErrors true이면 Execute()에서 에러를 자동으로 출력하지 않음
+	SilenceErrors bool
 
 	// 플래그 관리 (명령어별 고유의 플래그 셋 보유)
 	flags *FlagSet
@@ -57,7 +67,16 @@ func (c *Command) Execute(args []string) error {
 		Context: context.Background(),
 		Args:    args,
 	}
-	return c.execute(ctx)
+	err := c.execute(ctx)
+	if err != nil {
+		if errors.Is(err, ErrHelp) {
+			return nil // 도움말 출력 후 정상 종료
+		}
+		if !c.SilenceErrors {
+			rich.Println("[red][bold]Error:[/bold] %s[/red]", err.Error())
+		}
+	}
+	return err
 }
 
 func (c *Command) execute(ctx *Context) error {
@@ -72,7 +91,17 @@ func (c *Command) execute(ctx *Context) error {
 		}
 	}
 
-	// 2. 현재 명령어의 플래그 파싱 (하위 명령어가 아니면 이 명령어의 플래그로 파싱)
+	// 2. -h, --help 플래그 확인 (서브 커맨드 라우팅 이후)
+	// 참고: --help가 다른 플래그의 값으로 쓰이더라도 도움말이 우선 출력됩니다.
+	// 이는 표준 CLI 동작과 일치합니다.
+	for _, arg := range ctx.Args {
+		if arg == "-h" || arg == "--help" {
+			c.Help()
+			return ErrHelp
+		}
+	}
+
+	// 3. 현재 명령어의 플래그 파싱
 	if c.flags != nil {
 		remainingArgs, err := c.flags.Parse(ctx.Args)
 		if err != nil {
@@ -81,10 +110,32 @@ func (c *Command) execute(ctx *Context) error {
 		ctx.Args = remainingArgs
 	}
 
-	// 3. 명령어 실행
-	if c.Run != nil {
-		return c.Run(ctx)
+	// 4. PreRun 훅 실행
+	if c.PreRun != nil {
+		if err := c.PreRun(ctx); err != nil {
+			return err
+		}
 	}
 
-	return fmt.Errorf("명령어 실행 함수가 정의되지 않음: %s", c.Use)
+	// 5. 명령어 실행
+	if c.Run != nil {
+		if err := c.Run(ctx); err != nil {
+			return err
+		}
+	} else if len(c.commands) > 0 {
+		// Run이 없고 하위 명령어가 있는 경우 도움말 출력
+		c.Help()
+		return ErrHelp
+	} else {
+		return fmt.Errorf("명령어 실행 함수가 정의되지 않음: %s", c.Use)
+	}
+
+	// 6. PostRun 훅 실행
+	if c.PostRun != nil {
+		if err := c.PostRun(ctx); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }

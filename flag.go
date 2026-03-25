@@ -2,6 +2,7 @@ package wcli
 
 import (
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 )
@@ -17,10 +18,11 @@ const (
 
 // Flag CLI 명령어의 플래그 정보를 담는 구조체
 type Flag struct {
-	Name      string
-	Shorthand string
-	Usage     string
-	Type      FlagType
+	Name       string
+	Shorthand  string
+	Usage      string
+	Type       FlagType
+	DefaultVal string // 기본값 (도움말 출력용)
 
 	// 값 바인딩용 포인터
 	valueStr  *string
@@ -54,11 +56,12 @@ func (f *FlagSet) addFlag(flag *Flag) {
 func (f *FlagSet) StringVar(p *string, name, shorthand, value, usage string) {
 	*p = value
 	f.addFlag(&Flag{
-		Name:      name,
-		Shorthand: shorthand,
-		Usage:     usage,
-		Type:      TypeString,
-		valueStr:  p,
+		Name:       name,
+		Shorthand:  shorthand,
+		Usage:      usage,
+		Type:       TypeString,
+		DefaultVal: value,
+		valueStr:   p,
 	})
 }
 
@@ -66,11 +69,12 @@ func (f *FlagSet) StringVar(p *string, name, shorthand, value, usage string) {
 func (f *FlagSet) IntVar(p *int, name, shorthand string, value int, usage string) {
 	*p = value
 	f.addFlag(&Flag{
-		Name:      name,
-		Shorthand: shorthand,
-		Usage:     usage,
-		Type:      TypeInt,
-		valueInt:  p,
+		Name:       name,
+		Shorthand:  shorthand,
+		Usage:      usage,
+		Type:       TypeInt,
+		DefaultVal: strconv.Itoa(value),
+		valueInt:   p,
 	})
 }
 
@@ -145,4 +149,16 @@ func (f *FlagSet) parseValue(idx int, args []string, flag *Flag) (int, error) {
 	}
 
 	return idx + 1, nil // 값 인덱스까지 소비했으므로 idx+1 반환 (for 루프에서 i++ 되므로 실질적으로 idx+2 위치로 이동)
+}
+
+// All 등록된 모든 플래그를 이름 순서로 반환
+func (f *FlagSet) All() []*Flag {
+	result := make([]*Flag, 0, len(f.flags))
+	for _, flag := range f.flags {
+		result = append(result, flag)
+	}
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].Name < result[j].Name
+	})
+	return result
 }
