@@ -10,12 +10,18 @@ import (
 
 // ANSI 컬러 코드
 const (
-	Reset     = "\033[0m"
-	Bold      = "\033[1m"
-	Dim       = "\033[2m"
-	Underline = "\033[4m"
+	Reset = "\033[0m"
 
-	// 기본 색상
+	// 텍스트 스타일
+	Bold          = "\033[1m"
+	Dim           = "\033[2m"
+	Italic        = "\033[3m"
+	Underline     = "\033[4m"
+	Blink         = "\033[5m"
+	Reverse       = "\033[7m"
+	Strikethrough = "\033[9m"
+
+	// 전경 색상
 	Black   = "\033[30m"
 	Red     = "\033[31m"
 	Green   = "\033[32m"
@@ -24,6 +30,16 @@ const (
 	Magenta = "\033[35m"
 	Cyan    = "\033[36m"
 	White   = "\033[37m"
+
+	// 배경 색상
+	BgBlack   = "\033[40m"
+	BgRed     = "\033[41m"
+	BgGreen   = "\033[42m"
+	BgYellow  = "\033[43m"
+	BgBlue    = "\033[44m"
+	BgMagenta = "\033[45m"
+	BgCyan    = "\033[46m"
+	BgWhite   = "\033[47m"
 )
 
 // NoColor를 true로 설정하면 ANSI 코드를 출력하지 않습니다.
@@ -37,17 +53,29 @@ func init() {
 }
 
 var tagMap = map[string]string{
-	"bold":      Bold,
-	"dim":       Dim,
-	"underline": Underline,
-	"black":     Black,
-	"red":       Red,
-	"green":     Green,
-	"yellow":    Yellow,
-	"blue":      Blue,
-	"magenta":   Magenta,
-	"cyan":      Cyan,
-	"white":     White,
+	"bold":          Bold,
+	"dim":           Dim,
+	"underline":     Underline,
+	"italic":        Italic,
+	"blink":         Blink,
+	"reverse":       Reverse,
+	"strikethrough": Strikethrough,
+	"black":         Black,
+	"red":           Red,
+	"green":         Green,
+	"yellow":        Yellow,
+	"blue":          Blue,
+	"magenta":       Magenta,
+	"cyan":          Cyan,
+	"white":         White,
+	"bg-black":      BgBlack,
+	"bg-red":        BgRed,
+	"bg-green":      BgGreen,
+	"bg-yellow":     BgYellow,
+	"bg-blue":       BgBlue,
+	"bg-magenta":    BgMagenta,
+	"bg-cyan":       BgCyan,
+	"bg-white":      BgWhite,
 }
 
 // isTerminal w가 터미널(character device)인지 확인합니다.
@@ -206,4 +234,14 @@ func Print(format string, a ...any) {
 // Println 마크업이 적용된 텍스트를 os.Stdout에 출력하고 줄바꿈합니다.
 func Println(format string, a ...any) {
 	Fprintln(os.Stdout, format, a...)
+}
+
+// Sprint 마크업을 파싱하여 결과 문자열을 반환합니다.
+// NoColor가 true인 경우 ANSI 코드를 제거합니다.
+func Sprint(format string, a ...any) string {
+	text := fmt.Sprintf(format, a...)
+	if NoColor {
+		return stripMarkup(text)
+	}
+	return Markup(text)
 }
