@@ -3,7 +3,7 @@ package main
 // GoModTemplate go.mod 파일 뼈대 템플릿
 const GoModTemplate = `module {{.ModuleName}}
 
-go 1.20
+go 1.22
 
 require github.com/seoyc/wcli v0.0.0
 

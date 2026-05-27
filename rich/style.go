@@ -196,7 +196,10 @@ func Markup(text string) string {
 	}
 
 	output := result.String()
-	markupCache.Store(text, output)
+	// LoadOrStore: 동시에 같은 키가 들어와도 한 값만 저장됨
+	if actual, loaded := markupCache.LoadOrStore(text, output); loaded {
+		return actual.(string)
+	}
 	return output
 }
 

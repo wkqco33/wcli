@@ -1,0 +1,145 @@
+package config_test
+
+import (
+	"os"
+	"testing"
+
+	"github.com/seoyc/wcli/config"
+)
+
+type testBindConfig struct {
+	Port    int     `wcli:"PORT" default:"8080"`
+	Host    string  `wcli:"HOST" default:"localhost"`
+	Debug   bool    `wcli:"DEBUG"`
+	Timeout float64 `default:"30.5"`
+	DB      struct {
+		User string `wcli:"USER"`
+		Pass string `wcli:"PASS"`
+	} `wcli:"DATABASE"`
+}
+
+func TestLoadDotEnvAndYAML(t *testing.T) {
+	dotenvContent := "PORT=9090\nDATABASE_USER=admin\n"
+	if err := os.WriteFile(".test_bind.env", []byte(dotenvContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(".test_bind.env")
+
+	yamlContent := "HOST: example.com\nDEBUG: true\nDATABASE:\n  PASS: secret\n"
+	if err := os.WriteFile("test_bind.yaml", []byte(yamlContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove("test_bind.yaml")
+
+	var cfg testBindConfig
+	if err := config.Load(&cfg,
+		config.WithDotEnv(".test_bind.env"),
+		config.WithFiles("test_bind.yaml"),
+	); err != nil {
+		t.Fatalf("Load 실패: %v", err)
+	}
+
+	if cfg.Port != 9090 {
+		t.Errorf("Port: 예상 9090, 실제 %d", cfg.Port)
+	}
+	if cfg.Host != "example.com" {
+		t.Errorf("Host: 예상 example.com, 실제 %s", cfg.Host)
+	}
+	if !cfg.Debug {
+		t.Errorf("Debug: 예상 true, 실제 %v", cfg.Debug)
+	}
+	if cfg.Timeout != 30.5 {
+		t.Errorf("Timeout: 예상 30.5, 실제 %f", cfg.Timeout)
+	}
+	if cfg.DB.User != "admin" {
+		t.Errorf("DB.User: 예상 admin, 실제 %s", cfg.DB.User)
+	}
+	if cfg.DB.Pass != "secret" {
+		t.Errorf("DB.Pass: 예상 secret, 실제 %s", cfg.DB.Pass)
+	}
+}
+
+func TestLoadTOML(t *testing.T) {
+	tomlContent := "PORT = 8888\n[DATABASE]\nUSER = \"root\"\n"
+	if err := os.WriteFile("test_bind.toml", []byte(tomlContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove("test_bind.toml")
+
+	var cfg testBindConfig
+	if err := config.Load(&cfg, config.WithFiles("test_bind.toml")); err != nil {
+		t.Fatalf("Load 실패: %v", err)
+	}
+
+	if cfg.Port != 8888 {
+		t.Errorf("Port: 예상 8888, 실제 %d", cfg.Port)
+	}
+	if cfg.DB.User != "root" {
+		t.Errorf("DB.User: 예상 root, 실제 %s", cfg.DB.User)
+	}
+}
+
+func TestLoadEnvWithPrefix(t *testing.T) {
+	os.Setenv("WCLI_TEST_PORT", "1234")
+	os.Setenv("WCLI_TEST_DATABASE_USER", "env_user")
+	defer os.Unsetenv("WCLI_TEST_PORT")
+	defer os.Unsetenv("WCLI_TEST_DATABASE_USER")
+
+	type envCfg struct {
+		Port int `wcli:"PORT"`
+		DB   struct {
+			User string `wcli:"USER"`
+		} `wcli:"DATABASE"`
+	}
+
+	var cfg envCfg
+	if err := config.Load(&cfg, config.WithEnv(), config.WithPrefix("WCLI_TEST")); err != nil {
+		t.Fatalf("Load 실패: %v", err)
+	}
+
+	if cfg.Port != 1234 {
+		t.Errorf("Port: 예상 1234, 실제 %d", cfg.Port)
+	}
+	if cfg.DB.User != "env_user" {
+		t.Errorf("DB.User: 예상 env_user, 실제 %s", cfg.DB.User)
+	}
+}
+
+func TestWriteDefault(t *testing.T) {
+	type defaultCfg struct {
+		Name string `wcli:"NAME" default:"myapp"`
+		Port int    `wcli:"PORT" default:"9000"`
+	}
+
+	tmpFile, err := os.CreateTemp("", "defaults-*.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	tmpFile.Close()
+	defer os.Remove(tmpFile.Name())
+
+	var cfg defaultCfg
+	if err := config.WriteDefault(&cfg, tmpFile.Name()); err != nil {
+		t.Fatalf("WriteDefault 실패: %v", err)
+	}
+
+	info, err := os.Stat(tmpFile.Name())
+	if err != nil || info.Size() == 0 {
+		t.Errorf("WriteDefault로 생성된 파일이 비어있음")
+	}
+}
+
+func TestLoad_NilTarget(t *testing.T) {
+	err := config.Load(nil)
+	if err == nil {
+		t.Fatal("nil target에서 에러가 발생해야 합니다")
+	}
+}
+
+func TestLoad_NonPointer(t *testing.T) {
+	type cfg struct{ Port int }
+	err := config.Load(cfg{})
+	if err == nil {
+		t.Fatal("비포인터 target에서 에러가 발생해야 합니다")
+	}
+}

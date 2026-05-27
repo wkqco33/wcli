@@ -25,10 +25,18 @@ const DefaultHelpTemplate = `{{if .Long}}{{.Long}}{{else}}{{.Short}}{{end}}
 {{range .SubCommands}}  [cyan]{{.Name | pad .MaxNameLen}}[/cyan]   {{.Short}}{{if .Aliases}} ({{join .Aliases ", "}}){{end}}
 {{end}}
 {{end}}
+{{if .HasGroupedCmds}}{{range .GroupedCmds}}[bold][yellow]{{.GroupName}}:[/yellow][/bold]
+{{range .Commands}}  [cyan]{{.Name | pad .MaxNameLen}}[/cyan]   {{.Short}}{{if .Aliases}} ({{join .Aliases ", "}}){{end}}
+{{end}}
+{{end}}{{end}}
 {{if .HasLocalFlags}}[bold][yellow]Flags:[/yellow][/bold]
 {{range .LocalFlags}}  {{.ShortPart}}{{.FlagPart}}{{.RequiredMark}}   {{.Usage}}{{.DefaultPart}}
 {{end}}  [green]-h[/green], [green]--help[/green]          print help
 {{if .Version}}      [green]--version[/green]       print version
+{{end}}
+{{if .HasFlagGroupNote}}[bold][yellow]Flag Constraints:[/yellow][/bold]
+{{range .FlagGroupNotes}}  [dim]{{.}}[/dim]
+{{end}}
 {{end}}
 {{end}}
 {{if .HasGlobalFlags}}[bold][yellow]Global Flags:[/yellow][/bold]
@@ -50,16 +58,26 @@ type helpData struct {
 	Aliases        []string
 	HasSubCommands bool
 	SubCommands    []subCommandHelpData
+	HasGroupedCmds bool
+	GroupedCmds    []commandGroupData
 	HasLocalFlags  bool
 	LocalFlags     []flagHelpData
 	HasGlobalFlags bool
 	GlobalFlags    []flagHelpData
+	HasFlagGroupNote bool
+	FlagGroupNotes   []string // ["mutually exclusive: --json, --yaml"]
 }
 
 type subCommandHelpData struct {
 	Name       string
 	Short      string
 	Aliases    []string
+	MaxNameLen int
+}
+
+type commandGroupData struct {
+	GroupName  string
+	Commands   []subCommandHelpData
 	MaxNameLen int
 }
 
@@ -123,6 +141,8 @@ func getOrCompileTemplate(tmplStr string) (*template.Template, error) {
 }
 
 func escapeMarkupBrackets(s string) string {
+	// '[' 만 이스케이프: Markup 파서는 inTag=true 상태에서만 ']'를 태그 종료로 인식하므로,
+	// '[' 를 이스케이프하면 ']' 는 그냥 텍스트로 출력됨
 	return strings.ReplaceAll(s, "[", "\\[")
 }
 
@@ -139,6 +159,7 @@ func buildHelpData(cmd *Command) helpData {
 	}
 
 	if data.HasSubCommands {
+		// 전체 maxLen 계산 (그룹/비그룹 공통)
 		maxLen := 0
 		for _, sub := range cmd.commands {
 			if n := len(sub.Name()); n > maxLen {
@@ -146,13 +167,36 @@ func buildHelpData(cmd *Command) helpData {
 			}
 		}
 
-		data.SubCommands = make([]subCommandHelpData, len(cmd.commands))
-		for i, sub := range cmd.commands {
-			data.SubCommands[i] = subCommandHelpData{
+		// GroupName 기준으로 분리
+		groupOrder := []string{} // 삽입 순서 유지
+		groupMap := map[string][]subCommandHelpData{}
+
+		for _, sub := range cmd.commands {
+			entry := subCommandHelpData{
 				Name:       sub.Name(),
 				Short:      sub.Short,
 				Aliases:    sub.Aliases,
 				MaxNameLen: maxLen,
+			}
+			if sub.GroupName == "" {
+				data.SubCommands = append(data.SubCommands, entry)
+			} else {
+				if _, exists := groupMap[sub.GroupName]; !exists {
+					groupOrder = append(groupOrder, sub.GroupName)
+				}
+				groupMap[sub.GroupName] = append(groupMap[sub.GroupName], entry)
+			}
+		}
+
+		if len(groupOrder) > 0 {
+			data.HasGroupedCmds = true
+			data.GroupedCmds = make([]commandGroupData, len(groupOrder))
+			for i, name := range groupOrder {
+				data.GroupedCmds[i] = commandGroupData{
+					GroupName:  name,
+					Commands:   groupMap[name],
+					MaxNameLen: maxLen,
+				}
 			}
 		}
 	}
@@ -174,6 +218,23 @@ func buildHelpData(cmd *Command) helpData {
 			data.GlobalFlags[i] = buildFlagHelpData(f)
 		}
 	}
+
+	// flag group 주석 수집 — 로컬 + persistent 플래그셋의 그룹 목록을 직접 읽음
+	// (buildCombinedFlagSet의 merge()는 group 목록을 복사하지 않으므로 직접 접근)
+	for _, fs := range []*FlagSet{cmd.flags, cmd.persistentFlags} {
+		if fs == nil {
+			continue
+		}
+		for _, group := range fs.exclusiveGroups {
+			data.FlagGroupNotes = append(data.FlagGroupNotes,
+				"mutually exclusive: --"+strings.Join(group, ", --"))
+		}
+		for _, group := range fs.requiredTogether {
+			data.FlagGroupNotes = append(data.FlagGroupNotes,
+				"required together: --"+strings.Join(group, ", --"))
+		}
+	}
+	data.HasFlagGroupNote = len(data.FlagGroupNotes) > 0
 
 	return data
 }

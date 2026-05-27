@@ -8,10 +8,12 @@
 - **제로 의존성**: 외부 패키지 없이 순수 Go 표준 라이브러리만 사용
 - **성능 최우선**: O(1) 커맨드 라우팅 맵, 정렬 캐시, 마크업 파싱 캐시
 - **데이터 중심**: 직관적인 `Command` 구조체로 명령어 트리 구성
-- **Rich 텍스트 출력**: 마크업 기반 터미널 컬러/스타일 지원, TTY 자동 감지
+- **Rich 텍스트 출력**: 마크업 기반 터미널 컬러/스타일 + Spinner, ProgressBar, Table, Box 내장
 - **Cobra 호환 API**: `Persistent` 플래그/훅, 서브커맨드 별칭, `--name=value` 문법 등
 - **구조화된 에러 처리**: `FlagError`, `ValidationError` 등 정밀한 디버깅 및 세부 속성 추출 지원
 - **경량 로깅 서브패키지**: 런타임 오버헤드가 극히 적은 콘솔 로깅 및 동적 로그 레벨 제어 분리 제공
+- **Fuzzy 커맨드 매칭**: 오타 입력 시 유사 커맨드 자동 제안
+- **셸 자동 완성**: Bash / Zsh / Fish 완성 스크립트 생성
 
 ## 빠른 시작
 
@@ -83,6 +85,32 @@ rootCmd.AddCommand(getCmd)
 rootCmd.Execute(os.Args[1:])
 ```
 
+### 서브커맨드 그룹
+
+도움말에서 서브커맨드를 논리적 그룹으로 묶어 표시합니다.
+
+```go
+rootCmd.AddCommand(
+    &wcli.Command{Use: "deploy",   Short: "배포 실행",   GroupName: "배포 관리"},
+    &wcli.Command{Use: "rollback", Short: "배포 롤백",   GroupName: "배포 관리"},
+    &wcli.Command{Use: "logs",     Short: "로그 조회",   GroupName: "운영"},
+    &wcli.Command{Use: "status",   Short: "상태 확인"},  // 그룹 없음 → Available Commands
+)
+```
+
+도움말 출력 예:
+```
+배포 관리:
+  deploy     배포 실행
+  rollback   배포 롤백
+
+운영:
+  logs   로그 조회
+
+Available Commands:
+  status   상태 확인
+```
+
 ### 실행 훅
 
 ```go
@@ -110,6 +138,18 @@ cmd := &wcli.Command{
 ```
 
 실행 순서: `(루트→현재) PersistentPreRun` → `PreRun` → `Run` → `PostRun` → `(현재→루트) PersistentPostRun`
+
+### Fuzzy 커맨드 매칭
+
+오타가 있는 커맨드 입력 시 편집 거리 기반으로 유사 커맨드를 제안합니다.
+
+```
+$ app deply
+Error: unknown command "deply"
+
+Did you mean?
+  deploy
+```
 
 ## 플래그
 
@@ -221,8 +261,13 @@ rich.NoColor = true
 | `[bold]` | 굵게 |
 | `[dim]` | 흐리게 |
 | `[underline]` | 밑줄 |
+| `[italic]` | 기울임 |
+| `[blink]` | 깜빡임 |
+| `[reverse]` | 반전 |
+| `[strikethrough]` | 취소선 |
 | `[red]` `[green]` `[yellow]` | 텍스트 색상 |
 | `[blue]` `[magenta]` `[cyan]` `[white]` | 텍스트 색상 |
+| `[bg_red]` `[bg_green]` 등 | 배경색 |
 
 ### 사용법
 
@@ -245,6 +290,40 @@ rich.Println(`\[bold] 괄호 그대로 출력`)
 rich.Println("[bold][red]텍스트[/bold][/red]")  // 정상 동작
 ```
 
+## Spinner
+
+비동기 작업 진행 중 터미널에 회전 애니메이션을 출력합니다. 비터미널 환경(파이프/리다이렉션)에서는 정적 텍스트로 자동 전환됩니다.
+
+```go
+s := rich.NewSpinner(os.Stderr) // nil이면 os.Stderr 사용
+
+s.Start("데이터 로딩 중...")
+// ... 비동기 작업 ...
+s.UpdateText("거의 완료...")     // 실행 중 텍스트 변경 (thread-safe)
+s.Stop("[green]✓ 완료[/green]") // 멈추고 완료 메시지 출력
+```
+
+## Interactive Prompts
+
+`rich` 패키지의 대화형 입력 함수들입니다.
+
+```go
+// 텍스트 입력 (빈 입력 시 기본값 반환)
+name, err := rich.Prompt("이름을 입력하세요", "홍길동")
+
+// Y/N 확인
+ok, err := rich.Confirm("계속하시겠습니까?", true) // 기본값: Y
+
+// 번호 선택 (잘못된 입력 시 최대 3회 재시도)
+env, err := rich.Select("환경 선택", []string{"dev", "staging", "prod"})
+```
+
+테스트 시에는 `io.Reader`/`io.Writer`를 직접 주입하는 내부 함수를 사용합니다:
+
+```go
+result, err := rich.FPrompt(&buf, strings.NewReader("입력값\n"), "레이블", "기본값")
+```
+
 ## 커스텀 도움말
 
 ```go
@@ -258,21 +337,6 @@ cmd := &wcli.Command{
 ```
 
 `HelpFunc`가 `nil`이면 기본 도움말이 출력됩니다.
-
-## Makefile 타겟
-
-```
-make build       # 컴파일 오류 확인
-make test        # 전체 테스트
-make test-v      # 상세 테스트 출력
-make bench       # 벤치마크
-make cover       # 커버리지 HTML 리포트
-make check       # fmt-check + vet + test
-make fmt         # 코드 포맷 적용
-make vet         # 정적 분석
-make tidy        # go mod tidy
-make clean       # 빌드 아티팩트 제거
-```
 
 ## 에러 처리
 
@@ -300,20 +364,18 @@ if err := cmd.Execute(os.Args[1:]); err != nil {
 
 ## 로깅 (Logging)
 
-성능 최우선 원칙에 따라 설계된 경량 로거 서브패키지 `logging`을 제공합니다. 
+성능 최우선 원칙에 따라 설계된 경량 로거 서브패키지 `logging`을 제공합니다.
 
 ```go
 import "github.com/seoyc/wcli/logging"
 
 func main() {
-    // 1. DefaultLogger 생성 및 전역 설정
     logger := logging.NewDefaultLogger(os.Stderr, logging.LevelInfo, true)
     logging.SetLogger(logger)
 
     cmd := &wcli.Command{
         Use: "app",
         Run: func(ctx *wcli.Context) error {
-            // 2. 훅 내에서 context를 통해 전달받은 로거 사용
             ctx.Logger.Log(logging.LevelInfo, "작업을 시작합니다.")
             return nil
         },
@@ -327,28 +389,37 @@ func main() {
 플래그 관계 제약 조건 및 환경 변수 자동 주입 기능을 내장하고 있습니다.
 
 ### 환경 변수 자동 매핑 (BindEnv)
+
 특정 플래그가 지정되지 않은 경우, 대체해서 값을 읽어올 환경 변수를 지정합니다.
+
 ```go
 cmd.Flags().StringVar(&token, "token", "t", "", "인증 토큰")
-// --token이 공백일 시 환경변수 API_TOKEN을 조회하여 바인딩
 _ = cmd.Flags().BindEnv("token", "API_TOKEN")
 ```
 
 ### 상호 배제 조건 지정 (Mutually Exclusive)
+
 지정된 옵션 그룹 중 하나만 전달되어야 하는 조건을 검증합니다.
+
 ```go
 cmd.Flags().BoolVar(&jsonOut, "json", "j", false, "JSON 출력")
 cmd.Flags().BoolVar(&yamlOut, "yaml", "y", false, "YAML 출력")
-// --json과 --yaml을 동시에 설정 시 Validate 단계에서 에러 발생
 cmd.Flags().MarkFlagsMutuallyExclusive("json", "yaml")
 ```
 
+도움말에 제약 조건이 자동으로 표시됩니다:
+```
+Flag Constraints:
+  mutually exclusive: --json, --yaml
+```
+
 ### 필수 동반 조건 지정 (Required Together)
+
 하나라도 설정되면 그룹 내 모든 플래그가 함께 설정되어야 하는 조건입니다.
+
 ```go
 cmd.Flags().StringVar(&user, "user", "u", "", "계정")
 cmd.Flags().StringVar(&pass, "password", "p", "", "비밀번호")
-// --user 또는 --password 중 하나라도 주어지면 둘 다 필수로 동작
 cmd.Flags().MarkFlagsRequiredTogether("user", "password")
 ```
 
@@ -362,37 +433,50 @@ cmd.Flags().MarkFlagsRequiredTogether("user", "password")
 **지원 포맷:** `json`, `ini`, `yaml`/`yml`, `toml`, `env`
 
 ```go
-// 설정 파일 로드 (확장자로 포맷 자동 감지)
-wcli.SetConfigFile("config.yaml")
-if err := wcli.ReadInConfig(); err != nil {
+import "github.com/seoyc/wcli/config"
+
+config.SetConfigFile("config.yaml")
+if err := config.ReadInConfig(); err != nil {
     os.Exit(1)
 }
 
 var dbHost string
-cmd := &wcli.Command{
-    Use: "app",
-    Run: func(ctx *wcli.Context) error {
-        fmt.Printf("Database Host: %s\n", dbHost)
-        return nil
-    },
-}
-
 cmd.Flags().StringVar(&dbHost, "host", "H", "localhost", "데이터베이스 호스트")
 _ = cmd.Flags().BindEnv("host", "DB_HOST")
 _ = cmd.Flags().BindConfig("host", "database.host")  // 점 표기법으로 중첩 키 접근
-
-cmd.Execute(os.Args[1:])
 ```
 
 또는 직접 값 조회:
 
 ```go
-wcli.SetConfigFile("config.json")
-_ = wcli.ReadInConfig()
+config.SetConfigFile("config.json")
+_ = config.ReadInConfig()
 
-host := wcli.Get("database.host")  // 점 표기법 지원
-wcli.Set("app.debug", true)        // 런타임에 값 설정
-wcli.SetDefault("app.port", 8080)  // 키가 없을 때만 설정
+host := config.Get("database.host")  // 점 표기법 지원
+config.Set("app.debug", true)        // 런타임에 값 설정
+config.SetDefault("app.port", 8080)  // 키가 없을 때만 설정
+```
+
+### 설정 파일 자동 탐색 (AutoDiscoverConfig)
+
+앱 이름 기반으로 표준 경로를 순서대로 탐색해 첫 번째로 발견된 설정 파일을 로드합니다.
+
+탐색 순서:
+1. `extraPaths` (직접 지정 경로)
+2. `./config.{yaml,yml,toml,ini,json,env}`
+3. `~/.{appName}.{yaml,...}`
+4. `/etc/{appName}/config.{yaml,...}`
+
+```go
+// 설정 파일을 자동 탐색하여 로드
+if err := config.AutoDiscoverConfig("myapp"); err != nil {
+    // 파일이 없으면 에러
+}
+
+// 추가 탐색 경로 지정
+if err := config.AutoDiscoverConfig("myapp", "/opt/myapp/config.yaml"); err != nil {
+    os.Exit(1)
+}
 ```
 
 ### 구조체 바인딩 (Load)
@@ -400,6 +484,8 @@ wcli.SetDefault("app.port", 8080)  // 키가 없을 때만 설정
 설정 파일, `.env`, 환경변수 값을 구조체에 직접 바인딩합니다.
 
 ```go
+import "github.com/seoyc/wcli/config"
+
 type AppConfig struct {
     Host    string `wcli:"HOST" default:"localhost"`
     Port    int    `wcli:"PORT" default:"8080"`
@@ -411,11 +497,11 @@ type AppConfig struct {
 }
 
 var cfg AppConfig
-err := wcli.Load(&cfg,
-    wcli.WithDotEnv(".env"),          // .env 파일
-    wcli.WithFiles("config.yaml"),    // YAML 또는 TOML 파일
-    wcli.WithEnv(),                   // 시스템 환경변수 (최우선)
-    wcli.WithPrefix("APP"),           // 환경변수 접두사
+err := config.Load(&cfg,
+    config.WithDotEnv(".env"),          // .env 파일
+    config.WithFiles("config.yaml"),    // YAML 또는 TOML 파일
+    config.WithEnv(),                   // 시스템 환경변수 (최우선)
+    config.WithPrefix("APP"),           // 환경변수 접두사
 )
 ```
 
@@ -424,30 +510,33 @@ err := wcli.Load(&cfg,
 기본값을 파일로 내보낼 수 있습니다:
 
 ```go
-var cfg AppConfig
-wcli.WriteDefault(&cfg, "config.yaml")   // YAML로 저장
-wcli.WriteDefault(&cfg, "config.toml")   // TOML로 저장
-wcli.WriteDefault(&cfg, ".env")          // .env로 저장
+config.WriteDefault(&cfg, "config.yaml")   // YAML로 저장
+config.WriteDefault(&cfg, "config.toml")   // TOML로 저장
+config.WriteDefault(&cfg, ".env")          // .env로 저장
 ```
 
 ## 셸 자동 완성 (Shell Autocomplete)
 
-`wcli.NewCompletionCommand`를 사용하여 빌드된 명령어에 대한 Zsh/Bash용 자동 완성 코드를 생성할 수 있습니다.
+`wcli.NewCompletionCommand`로 Bash / Zsh / Fish 자동 완성 스크립트를 생성합니다.
 
 ```go
-func main() {
-    rootCmd := &wcli.Command{Use: "app", Run: func(ctx *wcli.Context) error { return nil }}
-    
-    // completion 서브커맨드 등록
-    rootCmd.AddCommand(wcli.NewCompletionCommand(rootCmd))
-    
-    rootCmd.Execute(os.Args[1:])
-}
+rootCmd.AddCommand(wcli.NewCompletionCommand(rootCmd))
+```
+
+```bash
+# Bash
+source <(app completion bash)
+
+# Zsh
+source <(app completion zsh)
+
+# Fish
+app completion fish > ~/.config/fish/completions/app.fish
 ```
 
 ## 커스텀 도움말 템플릿 (Template Help)
 
-`text/template` 형식을 사용해 도움말 레이아웃을 마음대로 변경할 수 있습니다. 템플릿 컴파일 결과는 패키지 단에서 캐싱되므로 매 출력 시 성능 저하가 없습니다.
+`text/template` 형식을 사용해 도움말 레이아웃을 변경할 수 있습니다. 템플릿 컴파일 결과는 패키지 단에서 캐싱됩니다.
 
 ```go
 const myHelpTemplate = `[bold][cyan]⚡ {{.Name}} 도움말[/cyan][/bold]
@@ -460,6 +549,62 @@ const myHelpTemplate = `[bold][cyan]⚡ {{.Name}} 도움말[/cyan][/bold]
 cmd := &wcli.Command{
     Use:          "app",
     Short:        "설명",
-    HelpTemplate: myHelpTemplate, // 템플릿 주입
+    HelpTemplate: myHelpTemplate,
 }
+```
+
+## wcli CLI 도구 (`cmd/wcli`)
+
+`wcli` 바이너리는 wcli 기반 프로젝트의 스캐폴딩 및 상태 점검 도구입니다.
+
+### 프로젝트 초기화
+
+```bash
+# 새 wcli 프로젝트 생성 (go.mod, main.go, Makefile 자동 생성)
+wcli init github.com/myorg/myapp
+
+# wcli 라이브러리 경로 직접 지정
+wcli init --lib-path ./wcli github.com/myorg/myapp
+```
+
+라이브러리 경로를 지정하지 않으면 `.gitmodules`에서 wcli 서브모듈 경로를 자동으로 탐지합니다.
+
+### 서브커맨드 추가
+
+```bash
+# create.go 파일 생성 + main.go에 rootCmd.AddCommand(CreateCmd) 자동 주입
+wcli add create
+```
+
+`main.go`에 `// wcli:commands` 마커가 있어야 자동 등록이 됩니다.
+
+### 프로젝트 상태 점검 (doctor)
+
+```bash
+wcli doctor
+```
+
+현재 디렉토리의 wcli 프로젝트 상태를 점검합니다:
+
+| 점검 항목 | 설명 |
+|---|---|
+| main.go 존재 | wcli 프로젝트 루트인지 확인 |
+| go.mod 존재 | Go 모듈 파일 유무 |
+| wcli 의존성 | go.mod에 seoyc/wcli 의존성 포함 여부 |
+| replace 경로 유효성 | go.mod replace 지시어의 경로 존재 여부 |
+| wcli:commands 마커 | main.go에 자동 등록 마커 포함 여부 |
+
+## Makefile 타겟
+
+```
+make build       # 컴파일 오류 확인
+make test        # 전체 테스트
+make test-v      # 상세 테스트 출력
+make bench       # 벤치마크
+make cover       # 커버리지 HTML 리포트
+make check       # fmt-check + vet + test
+make fmt         # 코드 포맷 적용
+make vet         # 정적 분석
+make tidy        # go mod tidy
+make clean       # 빌드 아티팩트 제거
 ```
