@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"strings"
 	"sync"
@@ -29,14 +28,21 @@ func SetConfigFile(path string) {
 
 	// 확장자를 바탕으로 타입 추정
 	ext := strings.ToLower(filepathExt(path))
-	if ext == ".json" {
+	switch ext {
+	case ".json":
 		globalConfig.configType = "json"
-	} else if ext == ".ini" || ext == ".cfg" || ext == ".conf" {
+	case ".ini", ".cfg", ".conf":
 		globalConfig.configType = "ini"
+	case ".yaml", ".yml":
+		globalConfig.configType = "yaml"
+	case ".toml":
+		globalConfig.configType = "toml"
+	case ".env":
+		globalConfig.configType = "env"
 	}
 }
 
-// SetConfigType 설정 파일 형식을 명시적으로 지정합니다 ("json", "ini").
+// SetConfigType 설정 파일 형식을 명시적으로 지정합니다 ("json", "ini", "yaml", "toml", "env").
 func SetConfigType(inType string) {
 	globalConfig.mu.Lock()
 	defer globalConfig.mu.Unlock()
@@ -52,7 +58,7 @@ func ReadInConfig() error {
 		return fmt.Errorf("config file path is not set")
 	}
 
-	content, err := ioutil.ReadFile(globalConfig.configPath)
+	content, err := os.ReadFile(globalConfig.configPath)
 	if err != nil {
 		return fmt.Errorf("read config file error: %w", err)
 	}
@@ -68,6 +74,24 @@ func ReadInConfig() error {
 		parsed, err := parseINIContent(string(content))
 		if err != nil {
 			return fmt.Errorf("parse ini config error: %w", err)
+		}
+		globalConfig.data = parsed
+	case "yaml", "yml":
+		parsed, err := parseYAMLContent(string(content))
+		if err != nil {
+			return fmt.Errorf("parse yaml config error: %w", err)
+		}
+		globalConfig.data = parsed
+	case "toml":
+		parsed, err := parseTOMLContent(string(content))
+		if err != nil {
+			return fmt.Errorf("parse toml config error: %w", err)
+		}
+		globalConfig.data = parsed
+	case "env":
+		parsed, err := parseDotEnvContent(string(content))
+		if err != nil {
+			return fmt.Errorf("parse env config error: %w", err)
 		}
 		globalConfig.data = parsed
 	default:
@@ -164,6 +188,134 @@ func setNestedMap(m map[string]any, key string, val any) {
 		}
 	}
 	current[parts[len(parts)-1]] = val
+}
+
+// Set 설정 맵에 계층형 점 표기법으로 값을 설정합니다.
+func Set(key string, value any) {
+	globalConfig.mu.Lock()
+	defer globalConfig.mu.Unlock()
+	setNestedMap(globalConfig.data, key, value)
+}
+
+// SetDefault 해당 키가 없을 때만 기본값을 설정합니다.
+func SetDefault(key string, value any) {
+	globalConfig.mu.Lock()
+	defer globalConfig.mu.Unlock()
+	if getNestedVal(globalConfig.data, key) == nil {
+		setNestedMap(globalConfig.data, key, value)
+	}
+}
+
+func getNestedVal(data map[string]any, key string) any {
+	parts := strings.Split(key, ".")
+	var current any = data
+	for _, part := range parts {
+		m, ok := current.(map[string]any)
+		if !ok {
+			return nil
+		}
+		val, exists := m[part]
+		if !exists {
+			return nil
+		}
+		current = val
+	}
+	return current
+}
+
+func parseYAMLContent(content string) (map[string]any, error) {
+	data := make(map[string]any)
+	scanner := bufio.NewScanner(strings.NewReader(content))
+
+	type stackItem struct {
+		indent int
+		m      map[string]any
+	}
+	stack := []stackItem{{indent: -1, m: data}}
+
+	for scanner.Scan() {
+		line := scanner.Text()
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+			continue
+		}
+
+		indent := len(line) - len(strings.TrimLeft(line, " "))
+		for len(stack) > 1 && stack[len(stack)-1].indent >= indent {
+			stack = stack[:len(stack)-1]
+		}
+
+		pair := strings.SplitN(trimmed, ":", 2)
+		if len(pair) < 1 {
+			continue
+		}
+
+		key := strings.TrimSpace(pair[0])
+		if len(pair) == 2 && strings.TrimSpace(pair[1]) != "" {
+			val := strings.TrimSpace(pair[1])
+			val = strings.Trim(val, `"'`)
+			stack[len(stack)-1].m[key] = val
+		} else {
+			newMap := make(map[string]any)
+			stack[len(stack)-1].m[key] = newMap
+			stack = append(stack, stackItem{indent: indent, m: newMap})
+		}
+	}
+
+	return data, scanner.Err()
+}
+
+func parseTOMLContent(content string) (map[string]any, error) {
+	data := make(map[string]any)
+	currentMap := data
+	scanner := bufio.NewScanner(strings.NewReader(content))
+
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+
+		if strings.HasPrefix(line, "[") && strings.HasSuffix(line, "]") {
+			section := strings.Trim(line, "[]")
+			newMap := make(map[string]any)
+			data[section] = newMap
+			currentMap = newMap
+			continue
+		}
+
+		parts := strings.SplitN(line, "=", 2)
+		if len(parts) == 2 {
+			key := strings.TrimSpace(parts[0])
+			val := strings.TrimSpace(parts[1])
+			val = strings.Trim(val, `"'`)
+			currentMap[key] = val
+		}
+	}
+
+	return data, scanner.Err()
+}
+
+func parseDotEnvContent(content string) (map[string]any, error) {
+	data := make(map[string]any)
+	scanner := bufio.NewScanner(strings.NewReader(content))
+
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+
+		parts := strings.SplitN(line, "=", 2)
+		if len(parts) == 2 {
+			key := strings.TrimSpace(parts[0])
+			val := strings.TrimSpace(parts[1])
+			val = strings.Trim(val, `"'`)
+			data[key] = val
+		}
+	}
+
+	return data, scanner.Err()
 }
 
 func filepathExt(path string) string {

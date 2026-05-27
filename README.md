@@ -353,61 +353,81 @@ cmd.Flags().MarkFlagsRequiredTogether("user", "password")
 ```
 
 ### 설정 파일 매핑 (BindConfig)
-외부 구성 파일(JSON, INI)의 값을 플래그에 매핑하여 자동으로 읽어올 수 있습니다. `wcli`는 다음과 같은 우선순위 체인(우선순위 연동 사슬)을 지원합니다:
-`입력된 플래그 > 바인딩된 환경변수 > 설정 파일 내 매핑값 > 기본값(Default)`
 
-의존성 오버헤드를 막기 위해 외부 YAML 파서 등을 사용하지 않고, Go 표준 패키지(`encoding/json`)와 한 줄씩 파싱하는 경량 INI 파서를 직접 내장 구현했습니다. 성능 하락을 방지하기 위해 파일 실시간 감지(Hot Reload)를 생략하고 CLI 실행 시점에 1회만 설정 파일을 파싱합니다.
+외부 구성 파일의 값을 플래그에 매핑합니다. 우선순위:
+`입력된 플래그 > 바인딩된 환경변수 > 설정 파일 매핑값 > 기본값`
+
+외부 의존성 없이 표준 라이브러리만으로 JSON, INI, YAML, TOML, .env를 파싱합니다.
+
+**지원 포맷:** `json`, `ini`, `yaml`/`yml`, `toml`, `env`
 
 ```go
-package main
-
-import (
-    "fmt"
-    "os"
-    "github.com/seoyc/wcli"
-)
-
-func main() {
-    // 1. 설정 파일 설정 및 로드 (JSON 또는 INI 지원)
-    wcli.SetConfigFile("config.json")
-    wcli.SetConfigType("json")
-    if err := wcli.ReadInConfig(); err != nil {
-        fmt.Printf("설정 파일 읽기 실패: %v\n", err)
-        os.Exit(1)
-    }
-
-    var dbHost string
-    cmd := &wcli.Command{
-        Use: "app",
-        Run: func(ctx *wcli.Context) error {
-            fmt.Printf("Database Host: %s\n", dbHost)
-            return nil
-        },
-    }
-
-    cmd.Flags().StringVar(&dbHost, "host", "H", "localhost", "데이터베이스 호스트")
-
-    // 2. 환경변수 및 설정파일 키 매핑 (점 표기법 지원)
-    _ = cmd.Flags().BindEnv("host", "DB_HOST")
-    _ = cmd.Flags().BindConfig("host", "database.host")
-
-    cmd.Execute(os.Args[1:])
+// 설정 파일 로드 (확장자로 포맷 자동 감지)
+wcli.SetConfigFile("config.yaml")
+if err := wcli.ReadInConfig(); err != nil {
+    os.Exit(1)
 }
+
+var dbHost string
+cmd := &wcli.Command{
+    Use: "app",
+    Run: func(ctx *wcli.Context) error {
+        fmt.Printf("Database Host: %s\n", dbHost)
+        return nil
+    },
+}
+
+cmd.Flags().StringVar(&dbHost, "host", "H", "localhost", "데이터베이스 호스트")
+_ = cmd.Flags().BindEnv("host", "DB_HOST")
+_ = cmd.Flags().BindConfig("host", "database.host")  // 점 표기법으로 중첩 키 접근
+
+cmd.Execute(os.Args[1:])
 ```
 
-#### INI 형식 매핑
-INI 설정 파일인 경우 섹션 이름을 포함한 점 표기법(`section.key`)으로 매핑합니다.
-```ini
-[database]
-host = config-db-host
-port = 5432
-```
+또는 직접 값 조회:
+
 ```go
-wcli.SetConfigFile("config.ini")
-wcli.SetConfigType("ini")
+wcli.SetConfigFile("config.json")
 _ = wcli.ReadInConfig()
 
-cmd.Flags().BindConfig("host", "database.host")
+host := wcli.Get("database.host")  // 점 표기법 지원
+wcli.Set("app.debug", true)        // 런타임에 값 설정
+wcli.SetDefault("app.port", 8080)  // 키가 없을 때만 설정
+```
+
+### 구조체 바인딩 (Load)
+
+설정 파일, `.env`, 환경변수 값을 구조체에 직접 바인딩합니다.
+
+```go
+type AppConfig struct {
+    Host    string `wcli:"HOST" default:"localhost"`
+    Port    int    `wcli:"PORT" default:"8080"`
+    Debug   bool   `wcli:"DEBUG"`
+    DB struct {
+        User string `wcli:"USER"`
+        Pass string `wcli:"PASS"`
+    } `wcli:"DATABASE"`
+}
+
+var cfg AppConfig
+err := wcli.Load(&cfg,
+    wcli.WithDotEnv(".env"),          // .env 파일
+    wcli.WithFiles("config.yaml"),    // YAML 또는 TOML 파일
+    wcli.WithEnv(),                   // 시스템 환경변수 (최우선)
+    wcli.WithPrefix("APP"),           // 환경변수 접두사
+)
+```
+
+소스 순서대로 병합되며, 뒤에 오는 소스가 앞의 값을 덮어씁니다.
+
+기본값을 파일로 내보낼 수 있습니다:
+
+```go
+var cfg AppConfig
+wcli.WriteDefault(&cfg, "config.yaml")   // YAML로 저장
+wcli.WriteDefault(&cfg, "config.toml")   // TOML로 저장
+wcli.WriteDefault(&cfg, ".env")          // .env로 저장
 ```
 
 ## 셸 자동 완성 (Shell Autocomplete)
