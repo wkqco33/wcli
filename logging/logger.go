@@ -34,6 +34,22 @@ func (l LogLevel) String() string {
 	}
 }
 
+// markup rich 마크업이 적용된 로그 레벨 문자열을 반환합니다.
+func (l LogLevel) markup() string {
+	switch l {
+	case LevelDebug:
+		return "[dim]DEBUG[/dim]"
+	case LevelInfo:
+		return "[blue]INFO[/blue]"
+	case LevelWarn:
+		return "[yellow]WARN[/yellow]"
+	case LevelError:
+		return "[red][bold]ERROR[/bold][/red]"
+	default:
+		return l.String()
+	}
+}
+
 // Logger wcli 내부 및 애플리케이션 실행 중 로그를 기록하는 인터페이스
 type Logger interface {
 	Log(level LogLevel, format string, args ...any)
@@ -70,18 +86,7 @@ func (l *DefaultLogger) Log(level LogLevel, format string, args ...any) {
 	}
 
 	if l.UseMarkup {
-		var levelStr string
-		switch level {
-		case LevelDebug:
-			levelStr = "[dim]DEBUG[/dim]"
-		case LevelInfo:
-			levelStr = "[blue]INFO[/blue]"
-		case LevelWarn:
-			levelStr = "[yellow]WARN[/yellow]"
-		case LevelError:
-			levelStr = "[red][bold]ERROR[/bold][/red]"
-		}
-		rich.Fprintln(l.Writer, "%s [%s] %s", timeStr, levelStr, msg)
+		rich.Fprintln(l.Writer, "%s [%s] %s", timeStr, level.markup(), msg)
 	} else {
 		fmt.Fprintf(l.Writer, "%s [%s] %s\n", timeStr, level.String(), msg)
 	}

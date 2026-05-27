@@ -9,19 +9,22 @@ import (
 // NewCompletionCommand 셸 자동 완성 스크립트를 생성하는 'completion' 명령어를 생성합니다.
 func NewCompletionCommand(root *Command) *Command {
 	return &Command{
-		Use:   "completion [bash|zsh]",
+		Use:   "completion [bash|zsh|fish]",
 		Short: "셸 자동 완성 스크립트 생성",
-		Long: `지정된 셸(bash 또는 zsh)에 대한 자동 완성 스크립트를 생성하여 표준 출력으로 덤프합니다.
+		Long: `지정된 셸(bash, zsh 또는 fish)에 대한 자동 완성 스크립트를 생성하여 표준 출력으로 덤프합니다.
 
 사용 방법:
   # Bash 완성 등록
   source <(your_app completion bash)
 
   # Zsh 완성 등록
-  source <(your_app completion zsh)`,
+  source <(your_app completion zsh)
+
+  # Fish 완성 등록
+  your_app completion fish > ~/.config/fish/completions/your_app.fish`,
 		Run: func(ctx *Context) error {
 			if len(ctx.Args) == 0 {
-				return fmt.Errorf("셸 이름을 지정해주세요 (bash 또는 zsh)")
+				return fmt.Errorf("셸 이름을 지정해주세요 (bash, zsh 또는 fish)")
 			}
 
 			shell := strings.ToLower(ctx.Args[0])
@@ -30,8 +33,10 @@ func NewCompletionCommand(root *Command) *Command {
 				return GenBashCompletion(root, root.outWriter())
 			case "zsh":
 				return GenZshCompletion(root, root.outWriter())
+			case "fish":
+				return GenFishCompletion(root, root.outWriter())
 			default:
-				return fmt.Errorf("지원하지 않는 셸 타입: %s (bash, zsh 중 하나를 지정하세요)", shell)
+				return fmt.Errorf("지원하지 않는 셸 타입: %s (bash, zsh, fish 중 하나를 지정하세요)", shell)
 			}
 		},
 	}
@@ -139,6 +144,57 @@ func GenZshCompletion(cmd *Command, w io.Writer) error {
 	return err
 }
 
+// GenFishCompletion fish 자동 완성 스크립트를 생성합니다.
+func GenFishCompletion(cmd *Command, w io.Writer) error {
+	name := cmd.Name()
+	var b strings.Builder
+
+	// 모든 서브커맨드 이름 목록 (not __fish_seen_subcommand_from 조건용)
+	var allSubNames []string
+	for _, sub := range cmd.commands {
+		allSubNames = append(allSubNames, sub.Name())
+	}
+	notSeenCond := ""
+	if len(allSubNames) > 0 {
+		notSeenCond = fmt.Sprintf(" -n 'not __fish_seen_subcommand_from %s'", strings.Join(allSubNames, " "))
+	}
+
+	// 루트 플래그 등록
+	for _, f := range cmd.ownFlags() {
+		desc := escapeFishDesc(f.Usage)
+		if f.Shorthand != "" {
+			fmt.Fprintf(&b, "complete -c %s%s -s %s -l %s -d '%s'\n", name, notSeenCond, f.Shorthand, f.Name, desc)
+		} else {
+			fmt.Fprintf(&b, "complete -c %s%s -l %s -d '%s'\n", name, notSeenCond, f.Name, desc)
+		}
+	}
+
+	// 서브커맨드 등록
+	for _, sub := range cmd.commands {
+		desc := escapeFishDesc(sub.Short)
+		fmt.Fprintf(&b, "complete -c %s -f%s -a %s -d '%s'\n", name, notSeenCond, sub.Name(), desc)
+
+		// 서브커맨드 플래그 등록
+		seenCond := fmt.Sprintf(" -n '__fish_seen_subcommand_from %s'", sub.Name())
+		for _, f := range sub.ownFlags() {
+			fDesc := escapeFishDesc(f.Usage)
+			if f.Shorthand != "" {
+				fmt.Fprintf(&b, "complete -c %s%s -s %s -l %s -d '%s'\n", name, seenCond, f.Shorthand, f.Name, fDesc)
+			} else {
+				fmt.Fprintf(&b, "complete -c %s%s -l %s -d '%s'\n", name, seenCond, f.Name, fDesc)
+			}
+		}
+	}
+
+	_, err := io.WriteString(w, b.String())
+	return err
+}
+
+// escapeFishDesc fish complete -d 인수의 작은따옴표 이스케이프
+func escapeFishDesc(s string) string {
+	return strings.ReplaceAll(s, "'", "\\'")
+}
+
 func collectAllWords(cmd *Command, words *[]string) {
 	// 중복 방지를 위한 맵
 	visited := make(map[string]bool)
@@ -183,9 +239,12 @@ func collectAllWords(cmd *Command, words *[]string) {
 }
 
 func escapeZshUsage(s string) string {
+	// zsh _arguments 설명 문자열 내 특수문자 처리
 	s = strings.ReplaceAll(s, "[", "\\[")
 	s = strings.ReplaceAll(s, "]", "\\]")
-	s = strings.ReplaceAll(s, "'", "")
-	s = strings.ReplaceAll(s, "\"", "")
+	s = strings.ReplaceAll(s, "'", "")  // 스크립트 구조 파괴 방지
+	s = strings.ReplaceAll(s, "\"", "") // 이중 인용부호 제거
+	s = strings.ReplaceAll(s, "`", "")  // 백틱: 명령 치환 방지
+	s = strings.ReplaceAll(s, "$", "")  // 달러: 변수 치환 방지
 	return s
 }

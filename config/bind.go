@@ -1,4 +1,4 @@
-package wcli
+package config
 
 import (
 	"bufio"
@@ -10,6 +10,9 @@ import (
 	"strings"
 	"time"
 )
+
+// durationType time.Duration 타입 비교를 위한 전역 캐시 (setFieldValue에서 반복 생성 방지)
+var durationType = reflect.TypeOf(time.Duration(0))
 
 // SourceType 설정 소스 유형
 type SourceType int
@@ -84,13 +87,27 @@ func WithPrefix(prefix string) BindOption {
 // 예시:
 //
 //	var cfg AppConfig
-//	err := wcli.Load(&cfg,
-//	    wcli.WithDotEnv(".env"),
-//	    wcli.WithFiles("config.yaml"),
-//	    wcli.WithEnv(),
-//	    wcli.WithPrefix("APP"),
+//	err := config.Load(&cfg,
+//	    config.WithDotEnv(".env"),
+//	    config.WithFiles("config.yaml"),
+//	    config.WithEnv(),
+//	    config.WithPrefix("APP"),
 //	)
 func Load(target any, options ...BindOption) error {
+	if target == nil {
+		return fmt.Errorf("Load: target이 nil입니다")
+	}
+	rv := reflect.ValueOf(target)
+	if rv.Kind() != reflect.Ptr {
+		return fmt.Errorf("Load: target은 포인터여야 합니다 (got %T)", target)
+	}
+	if rv.IsNil() {
+		return fmt.Errorf("Load: target 포인터가 nil입니다")
+	}
+	if rv.Elem().Kind() != reflect.Struct {
+		return fmt.Errorf("Load: target은 구조체 포인터여야 합니다 (got %T)", target)
+	}
+
 	loader := &configBindLoader{tagName: "wcli"}
 	for _, opt := range options {
 		opt(loader)
@@ -108,7 +125,7 @@ func Load(target any, options ...BindOption) error {
 		mergeConfigMap(merged, data)
 	}
 
-	return bindStruct(reflect.ValueOf(target).Elem(), merged, merged, loader.tagName, loader.prefix)
+	return bindStruct(rv.Elem(), merged, merged, loader.tagName, loader.prefix)
 }
 
 // WriteDefault target 구조체의 `default` 태그 값을 파일로 저장합니다.
@@ -229,21 +246,25 @@ func bindStruct(structVal reflect.Value, data map[string]any, rootData map[strin
 		var rawValue any
 		var exists bool
 
-		// 1. 중첩 구조 (파일 데이터)에서 조회
+		// 우선순위 체인 (낮음 → 높음):
+		//   default 태그  →  rootData 평탄화  →  파일 소스 데이터  →  시스템 환경변수
+		// 뒤에 오는 소스가 앞의 값을 덮어씁니다.
+
+		// 1. 파일 소스 데이터에서 조회 (yaml/toml/dotenv 등)
 		rawValue, exists = data[tag]
 
-		// 2. 시스템 환경변수 조회 (최우선)
+		// 2. 시스템 환경변수가 있으면 최우선 적용 (파일 데이터를 덮어씀)
 		if envVal, envExists := os.LookupEnv(strings.ToUpper(fullKey)); envExists {
 			rawValue = envVal
 			exists = true
 		}
 
-		// 3. rootData 평탄화 조회
+		// 3. 위 두 소스 모두 없을 때 rootData 평탄화 조회 (대문자 키 매칭)
 		if !exists {
 			rawValue, exists = rootData[strings.ToUpper(fullKey)]
 		}
 
-		// 4. default 태그 fallback
+		// 4. 모든 소스에 없을 때 default 태그 폴백
 		if !exists {
 			if defaultVal := fieldType.Tag.Get("default"); defaultVal != "" {
 				rawValue = defaultVal
@@ -279,7 +300,7 @@ func setFieldValue(field reflect.Value, value any) error {
 	case reflect.String:
 		field.SetString(valStr)
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		if field.Type() == reflect.TypeOf(time.Duration(0)) {
+		if field.Type() == durationType {
 			d, err := time.ParseDuration(valStr)
 			if err == nil {
 				field.SetInt(int64(d))
@@ -387,7 +408,6 @@ func saveTOML(path string, data map[string]any) error {
 	}
 	defer file.Close()
 
-	// 최상위 키-값 먼저
 	for k, v := range data {
 		if _, ok := v.(map[string]any); !ok {
 			if _, err := file.WriteString(fmt.Sprintf("%s = %v\n", k, v)); err != nil {
@@ -395,7 +415,6 @@ func saveTOML(path string, data map[string]any) error {
 			}
 		}
 	}
-	// 섹션
 	for k, v := range data {
 		if section, ok := v.(map[string]any); ok {
 			if _, err := file.WriteString(fmt.Sprintf("\n[%s]\n", k)); err != nil {

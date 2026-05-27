@@ -34,6 +34,7 @@ type Command struct {
 	Aliases      []string // 커맨드 이름의 별칭 목록
 	Version      string   // 설정 시 --version 플래그 자동 등록
 	HelpTemplate string   // 설정 시 기본 도움말 대신 템플릿으로 출력
+	GroupName    string   // 부모 도움말에서 이 커맨드를 분류할 그룹 이름
 
 	// Logger 명령어 실행 시 사용할 로거
 	Logger logging.Logger
@@ -181,6 +182,15 @@ func (c *Command) execute(ctx *Context) error {
 			ctx.Args = ctx.Args[1:]
 			return sub.execute(ctx)
 		}
+
+		// 1-1. commandMap miss + 서브커맨드가 있을 때 퍼지 매칭 제안
+		input := ctx.Args[0]
+		if len(c.commands) > 0 && len(input) > 0 && input[0] != '-' {
+			if suggestions := suggestCommands(input, c.commandMap); len(suggestions) > 0 {
+				return fmt.Errorf("unknown command %q\n\nDid you mean?\n  %s",
+					input, strings.Join(suggestions, "\n  "))
+			}
+		}
 	}
 
 	// 2. --version 플래그 확인
@@ -299,11 +309,15 @@ func (c *Command) buildCombinedFlagSet() *FlagSet {
 
 // ancestors 루트부터 부모까지의 조상 커맨드를 순서대로 반환합니다.
 func (c *Command) ancestors() []*Command {
-	var result []*Command
+	// 역순으로 수집 후 제자리 뒤집기: O(n) (prepend 방식의 O(n²) 개선)
+	var reversed []*Command
 	for p := c.parent; p != nil; p = p.parent {
-		result = append([]*Command{p}, result...)
+		reversed = append(reversed, p)
 	}
-	return result
+	for i, j := 0, len(reversed)-1; i < j; i, j = i+1, j-1 {
+		reversed[i], reversed[j] = reversed[j], reversed[i]
+	}
+	return reversed
 }
 
 // collectPersistentPreRuns 루트 → 현재 순서로 PersistentPreRun 훅을 수집합니다.
@@ -407,4 +421,77 @@ func (c *Command) inheritedPersistentFlags() []*Flag {
 // Help 도움말을 os.Stdout(또는 OutWriter)에 출력합니다.
 func (c *Command) Help() {
 	c.help(c.outWriter())
+}
+
+// levenshtein 두 문자열 간의 편집 거리(Levenshtein distance)를 계산합니다.
+// rolling array 방식으로 O(m*n) 시간, O(min(m,n)) 공간을 사용합니다.
+func levenshtein(a, b string) int {
+	ra, rb := []rune(a), []rune(b)
+	if len(ra) < len(rb) {
+		ra, rb = rb, ra
+	}
+	// rb가 더 짧거나 같은 길이
+	prev := make([]int, len(rb)+1)
+	for j := range prev {
+		prev[j] = j
+	}
+	for i := 1; i <= len(ra); i++ {
+		curr := make([]int, len(rb)+1)
+		curr[0] = i
+		for j := 1; j <= len(rb); j++ {
+			cost := 1
+			if ra[i-1] == rb[j-1] {
+				cost = 0
+			}
+			del := prev[j] + 1
+			ins := curr[j-1] + 1
+			sub := prev[j-1] + cost
+			curr[j] = min3(del, ins, sub)
+		}
+		prev = curr
+	}
+	return prev[len(rb)]
+}
+
+func min3(a, b, c int) int {
+	if a < b {
+		if a < c {
+			return a
+		}
+		return c
+	}
+	if b < c {
+		return b
+	}
+	return c
+}
+
+// suggestCommands input 과 유사한 커맨드 이름 목록을 반환합니다.
+// 편집 거리 임계값: min(2, len(input)/2)
+func suggestCommands(input string, cmdMap map[string]*Command) []string {
+	if len(input) == 0 {
+		return nil
+	}
+	threshold := len(input) / 2
+	if threshold > 2 {
+		threshold = 2
+	}
+	if threshold == 0 {
+		threshold = 1
+	}
+
+	// 중복 제거를 위해 커맨드 이름 집합 구성
+	seen := make(map[string]bool)
+	var suggestions []string
+	for _, cmd := range cmdMap {
+		name := cmd.Name()
+		if seen[name] {
+			continue
+		}
+		seen[name] = true
+		if levenshtein(input, name) <= threshold {
+			suggestions = append(suggestions, name)
+		}
+	}
+	return suggestions
 }

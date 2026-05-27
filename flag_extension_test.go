@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/seoyc/wcli"
+	"github.com/seoyc/wcli/config"
 )
 
 func TestFlagBindEnv(t *testing.T) {
@@ -148,9 +149,9 @@ func TestFlagPriorityChain(t *testing.T) {
 	_, _ = tmpFile.Write([]byte(jsonContent))
 	tmpFile.Close()
 
-	wcli.SetConfigFile(tmpFile.Name())
-	wcli.SetConfigType("json")
-	_ = wcli.ReadInConfig()
+	config.SetConfigFile(tmpFile.Name())
+	config.SetConfigType("json")
+	_ = config.ReadInConfig()
 
 	// 1. 설정파일 매핑 작동 검증 (플래그, 환경변수 없을 시)
 	var host string

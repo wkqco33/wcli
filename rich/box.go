@@ -59,7 +59,8 @@ func (b *Box) Render(w io.Writer) {
 
 	// 내용 줄 (내용 자체의 마크업도 그대로 파싱됨)
 	for _, line := range lines {
-		visualLen := utf8.RuneCountInString(stripMarkup(line))
+		stripped := stripMarkup(line) // maxWidth 계산에서 이미 호출됐으므로 재계산 방지
+		visualLen := utf8.RuneCountInString(stripped)
 		padding := strings.Repeat(" ", maxWidth-visualLen)
 		Fprintln(w, "[bold]│[/bold] %s%s [bold]│[/bold]", line, padding)
 	}

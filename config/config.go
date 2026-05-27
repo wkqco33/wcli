@@ -1,10 +1,11 @@
-package wcli
+package config
 
 import (
 	"bufio"
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 )
@@ -12,7 +13,7 @@ import (
 type configStore struct {
 	mu         sync.RWMutex
 	configPath string
-	configType string // "json" or "ini"
+	configType string
 	data       map[string]any
 }
 
@@ -27,7 +28,7 @@ func SetConfigFile(path string) {
 	globalConfig.configPath = path
 
 	// 확장자를 바탕으로 타입 추정
-	ext := strings.ToLower(filepathExt(path))
+	ext := strings.ToLower(filepath.Ext(path))
 	switch ext {
 	case ".json":
 		globalConfig.configType = "json"
@@ -105,89 +106,7 @@ func ReadInConfig() error {
 func Get(key string) any {
 	globalConfig.mu.RLock()
 	defer globalConfig.mu.RUnlock()
-
-	parts := strings.Split(key, ".")
-	var current any = globalConfig.data
-
-	for _, part := range parts {
-		m, ok := current.(map[string]any)
-		if !ok {
-			return nil
-		}
-		val, exists := m[part]
-		if !exists {
-			return nil
-		}
-		current = val
-	}
-	return current
-}
-
-func parseINIContent(content string) (map[string]any, error) {
-	data := make(map[string]any)
-	scanner := bufio.NewScanner(strings.NewReader(content))
-	var currentSection string
-
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		// 빈 줄 또는 주석 건너뜀
-		if line == "" || strings.HasPrefix(line, "#") || strings.HasPrefix(line, ";") {
-			continue
-		}
-
-		// 섹션 헤더 처리
-		if strings.HasPrefix(line, "[") && strings.HasSuffix(line, "]") {
-			currentSection = strings.TrimSpace(line[1 : len(line)-1])
-			continue
-		}
-
-		// 키-밸류 추출
-		parts := strings.SplitN(line, "=", 2)
-		if len(parts) != 2 {
-			continue // 잘못된 INI 형식 라인은 건너뜀
-		}
-
-		key := strings.TrimSpace(parts[0])
-		val := strings.TrimSpace(parts[1])
-
-		// 쌍따옴표 제거
-		if strings.HasPrefix(val, "\"") && strings.HasSuffix(val, "\"") {
-			val = val[1 : len(val)-1]
-		}
-
-		fullKey := key
-		if currentSection != "" {
-			fullKey = currentSection + "." + key
-		}
-
-		setNestedMap(data, fullKey, val)
-	}
-
-	return data, scanner.Err()
-}
-
-func setNestedMap(m map[string]any, key string, val any) {
-	parts := strings.Split(key, ".")
-	current := m
-	for i := 0; i < len(parts)-1; i++ {
-		part := parts[i]
-		next, exists := current[part]
-		if !exists {
-			nextMap := make(map[string]any)
-			current[part] = nextMap
-			current = nextMap
-		} else {
-			nextMap, ok := next.(map[string]any)
-			if !ok {
-				nextMap = make(map[string]any)
-				current[part] = nextMap
-				current = nextMap
-			} else {
-				current = nextMap
-			}
-		}
-	}
-	current[parts[len(parts)-1]] = val
+	return getNestedVal(globalConfig.data, key)
 }
 
 // Set 설정 맵에 계층형 점 표기법으로 값을 설정합니다.
@@ -221,6 +140,69 @@ func getNestedVal(data map[string]any, key string) any {
 		current = val
 	}
 	return current
+}
+
+func setNestedMap(m map[string]any, key string, val any) {
+	parts := strings.Split(key, ".")
+	current := m
+	for i := 0; i < len(parts)-1; i++ {
+		part := parts[i]
+		next, exists := current[part]
+		if !exists {
+			nextMap := make(map[string]any)
+			current[part] = nextMap
+			current = nextMap
+		} else {
+			nextMap, ok := next.(map[string]any)
+			if !ok {
+				nextMap = make(map[string]any)
+				current[part] = nextMap
+				current = nextMap
+			} else {
+				current = nextMap
+			}
+		}
+	}
+	current[parts[len(parts)-1]] = val
+}
+
+func parseINIContent(content string) (map[string]any, error) {
+	data := make(map[string]any)
+	scanner := bufio.NewScanner(strings.NewReader(content))
+	var currentSection string
+
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" || strings.HasPrefix(line, "#") || strings.HasPrefix(line, ";") {
+			continue
+		}
+
+		if strings.HasPrefix(line, "[") && strings.HasSuffix(line, "]") {
+			currentSection = strings.TrimSpace(line[1 : len(line)-1])
+			continue
+		}
+
+		parts := strings.SplitN(line, "=", 2)
+		if len(parts) != 2 {
+			continue
+		}
+
+		key := strings.TrimSpace(parts[0])
+		val := strings.TrimSpace(parts[1])
+
+		if strings.HasPrefix(val, "\"") && strings.HasSuffix(val, "\"") {
+			val = val[1 : len(val)-1]
+		}
+
+		fullKey := key
+		if currentSection != "" {
+			fullKey = currentSection + "." + key
+		}
+
+		setNestedMap(data, fullKey, val)
+	}
+
+	return data, scanner.Err()
 }
 
 func parseYAMLContent(content string) (map[string]any, error) {
@@ -276,11 +258,10 @@ func parseTOMLContent(content string) (map[string]any, error) {
 			continue
 		}
 
+		// [section] 또는 [section.subsection] 처리
 		if strings.HasPrefix(line, "[") && strings.HasSuffix(line, "]") {
 			section := strings.Trim(line, "[]")
-			newMap := make(map[string]any)
-			data[section] = newMap
-			currentMap = newMap
+			currentMap = getOrCreateNestedMap(data, section)
 			continue
 		}
 
@@ -294,6 +275,22 @@ func parseTOMLContent(content string) (map[string]any, error) {
 	}
 
 	return data, scanner.Err()
+}
+
+// getOrCreateNestedMap 점 표기법 경로에서 중첩 맵을 가져오거나 생성합니다.
+func getOrCreateNestedMap(root map[string]any, path string) map[string]any {
+	parts := strings.Split(path, ".")
+	current := root
+	for _, part := range parts {
+		if m, ok := current[part].(map[string]any); ok {
+			current = m
+		} else {
+			m := make(map[string]any)
+			current[part] = m
+			current = m
+		}
+	}
+	return current
 }
 
 func parseDotEnvContent(content string) (map[string]any, error) {
@@ -318,11 +315,41 @@ func parseDotEnvContent(content string) (map[string]any, error) {
 	return data, scanner.Err()
 }
 
-func filepathExt(path string) string {
-	for i := len(path) - 1; i >= 0 && !os.IsPathSeparator(path[i]); i-- {
-		if path[i] == '.' {
-			return path[i:]
+// configExtensions 지원 설정 파일 확장자 목록 (우선순위 순서)
+var configExtensions = []string{".yaml", ".yml", ".toml", ".ini", ".json", ".env"}
+
+// AutoDiscoverConfig appName 기반으로 표준 경로를 순서대로 탐색해 설정 파일을 로드합니다.
+// 탐색 순서: extraPaths → ./config.* → ~/.appname.* → /etc/appname/config.*
+// 첫 번째로 존재하는 파일을 로드하며, 아무 파일도 없으면 에러를 반환합니다.
+func AutoDiscoverConfig(appName string, extraPaths ...string) error {
+	candidates := make([]string, 0, len(extraPaths)+len(configExtensions)*2)
+
+	// 1. 사용자 지정 경로
+	candidates = append(candidates, extraPaths...)
+
+	// 2. ./config.*
+	for _, ext := range configExtensions {
+		candidates = append(candidates, "config"+ext)
+	}
+
+	// 3. ~/.appname.*
+	if home, err := os.UserHomeDir(); err == nil {
+		for _, ext := range configExtensions {
+			candidates = append(candidates, filepath.Join(home, "."+appName+ext))
 		}
 	}
-	return ""
+
+	// 4. /etc/appname/config.*
+	for _, ext := range configExtensions {
+		candidates = append(candidates, filepath.Join("/etc", appName, "config"+ext))
+	}
+
+	for _, path := range candidates {
+		if _, err := os.Stat(path); err == nil {
+			SetConfigFile(path)
+			return ReadInConfig()
+		}
+	}
+
+	return fmt.Errorf("설정 파일을 찾을 수 없습니다 (앱명: %s)", appName)
 }

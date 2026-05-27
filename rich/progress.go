@@ -3,7 +3,6 @@ package rich
 import (
 	"fmt"
 	"io"
-	"math"
 	"os"
 	"strings"
 )
@@ -36,7 +35,12 @@ func (p *ProgressBar) Render(current int) string {
 	if width <= 0 {
 		width = 40
 	}
-	pct := math.Max(0, math.Min(1.0, float64(current)/float64(p.Total)))
+	pct := float64(current) / float64(p.Total)
+	if pct < 0 {
+		pct = 0
+	} else if pct > 1.0 {
+		pct = 1.0
+	}
 	filled := int(pct * float64(width))
 	bar := "[green]" + strings.Repeat(p.Fill, filled) + "[/green]" + strings.Repeat(p.Empty, width-filled)
 	return fmt.Sprintf("%s %3.0f%%", bar, pct*100)

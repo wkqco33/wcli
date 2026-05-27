@@ -17,6 +17,7 @@ import (
 	"os"
 
 	"github.com/seoyc/wcli"
+	"github.com/seoyc/wcli/config"
 	"github.com/seoyc/wcli/rich"
 )
 
@@ -53,8 +54,8 @@ func main() {
 	_ = os.WriteFile(configFile, []byte(tempJSONConfig), 0644)
 	defer os.Remove(configFile)
 
-	wcli.SetConfigFile(configFile)
-	if err := wcli.ReadInConfig(); err != nil {
+	config.SetConfigFile(configFile)
+	if err := config.ReadInConfig(); err != nil {
 		fmt.Printf("설정 로드 실패: %v\n", err)
 		os.Exit(1)
 	}
@@ -108,10 +109,10 @@ func demoStructBinding() {
 	defer os.Remove("demo.env")
 
 	var cfg AppConfig
-	if err := wcli.Load(&cfg,
-		wcli.WithDotEnv("demo.env"),
-		wcli.WithFiles("demo.yaml"),
-		wcli.WithEnv(),
+	if err := config.Load(&cfg,
+		config.WithDotEnv("demo.env"),
+		config.WithFiles("demo.yaml"),
+		config.WithEnv(),
 	); err != nil {
 		fmt.Printf("  Load 실패: %v\n", err)
 		return

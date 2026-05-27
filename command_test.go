@@ -297,3 +297,36 @@ func TestCommandExecute(t *testing.T) {
 		}
 	})
 }
+
+func TestFuzzyCommandSuggestion(t *testing.T) {
+	newRoot := func() *wcli.Command {
+		root := &wcli.Command{Use: "app"}
+		root.AddCommand(&wcli.Command{Use: "deploy", Short: "배포"})
+		root.AddCommand(&wcli.Command{Use: "status", Short: "상태"})
+		return root
+	}
+
+	t.Run("유사 커맨드 제안 포함", func(t *testing.T) {
+		err := newRoot().Execute([]string{"deply"})
+		if err == nil {
+			t.Fatal("에러가 발생해야 함")
+		}
+		if !strings.Contains(err.Error(), "deploy") {
+			t.Errorf("'deploy' 제안이 에러 메시지에 없음: %v", err)
+		}
+		if !strings.Contains(err.Error(), "Did you mean") {
+			t.Errorf("'Did you mean' 문구가 에러 메시지에 없음: %v", err)
+		}
+	})
+
+	t.Run("편집거리 큰 입력 - 제안 없이 도움말 출력", func(t *testing.T) {
+		// Run이 없는 루트: unknown args → 도움말 출력 → ErrHelp → Execute()에서 nil 반환
+		err := newRoot().Execute([]string{"xyz123"})
+		if err != nil {
+			// 제안이 있으면 에러, 없으면 nil (help)
+			if strings.Contains(err.Error(), "Did you mean") {
+				t.Errorf("제안이 없어야 하는데 포함됨: %v", err)
+			}
+		}
+	})
+}

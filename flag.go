@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/seoyc/wcli/config"
 )
 
 // FlagType 플래그 값의 타입을 정의
@@ -141,7 +143,7 @@ func (f *FlagSet) Validate() error {
 
 		// (2) 설정파일 바인딩 검사 및 설정
 		if flag.configKey != "" {
-			if val := Get(flag.configKey); val != nil {
+			if val := config.Get(flag.configKey); val != nil {
 				var valStr string
 				switch v := val.(type) {
 				case string:
