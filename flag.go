@@ -2,6 +2,7 @@ package wcli
 
 import (
 	"fmt"
+	"os"
 	"sort"
 	"strconv"
 	"strings"
@@ -36,16 +37,20 @@ type Flag struct {
 	valueDuration    *time.Duration
 	valueStringSlice *[]string
 
-	required bool               // MarkRequired로 설정
-	validate func(string) error // SetValidation으로 설정
-	wasSet   bool               // Parse 후 실제로 값이 설정됐는지 여부
+	required  bool               // MarkRequired로 설정
+	validate  func(string) error // SetValidation으로 설정
+	wasSet    bool               // Parse 후 실제로 값이 설정됐는지 여부
+	envName   string             // BindEnv로 바인딩된 환경변수명
+	configKey string             // BindConfig로 바인딩된 구성파일 키
 }
 
 // FlagSet 플래그들의 모음과 파싱 로직을 담당
 type FlagSet struct {
-	flags  map[string]*Flag // Name을 키로
-	shorts map[string]*Flag // Shorthand를 키로
-	sorted []*Flag          // All() 정렬 캐시 (addFlag/merge 호출 시 무효화)
+	flags            map[string]*Flag // Name을 키로
+	shorts           map[string]*Flag // Shorthand를 키로
+	sorted           []*Flag          // All() 정렬 캐시 (addFlag/merge 호출 시 무효화)
+	exclusiveGroups  [][]string       // 상호 배제 플래그 그룹 목록
+	requiredTogether [][]string       // 필수 동반 지정 플래그 그룹 목록
 }
 
 // NewFlagSet 새로운 FlagSet을 생성
@@ -69,7 +74,7 @@ func (f *FlagSet) addFlag(flag *Flag) {
 func (f *FlagSet) MarkRequired(name string) error {
 	flag, ok := f.flags[name]
 	if !ok {
-		return fmt.Errorf("flag '%s' not found", name)
+		return &FlagError{FlagName: name, Err: fmt.Errorf("flag '%s' not found", name)}
 	}
 	flag.required = true
 	return nil
@@ -80,22 +85,132 @@ func (f *FlagSet) MarkRequired(name string) error {
 func (f *FlagSet) SetValidation(name string, fn func(string) error) error {
 	flag, ok := f.flags[name]
 	if !ok {
-		return fmt.Errorf("flag '%s' not found", name)
+		return &FlagError{FlagName: name, Err: fmt.Errorf("flag '%s' not found", name)}
 	}
 	flag.validate = fn
 	return nil
 }
 
+// BindEnv 플래그에 환경변수를 바인딩합니다. 플래그가 지정되지 않았을 때 환경변수에서 읽어옵니다.
+func (f *FlagSet) BindEnv(name, envName string) error {
+	flag, ok := f.flags[name]
+	if !ok {
+		return &FlagError{FlagName: name, Err: fmt.Errorf("flag '%s' not found", name)}
+	}
+	flag.envName = envName
+	return nil
+}
+
+// BindConfig 플래그에 설정 파일 키를 바인딩합니다. 플래그와 환경변수가 지정되지 않았을 때 설정 파일에서 읽어옵니다.
+func (f *FlagSet) BindConfig(name, configKey string) error {
+	flag, ok := f.flags[name]
+	if !ok {
+		return &FlagError{FlagName: name, Err: fmt.Errorf("flag '%s' not found", name)}
+	}
+	flag.configKey = configKey
+	return nil
+}
+
+// MarkFlagsMutuallyExclusive 플래그 목록을 상호 배제하도록 지정합니다. 지정된 플래그들 중 하나만 설정되어야 합니다.
+func (f *FlagSet) MarkFlagsMutuallyExclusive(names ...string) {
+	f.exclusiveGroups = append(f.exclusiveGroups, names)
+}
+
+// MarkFlagsRequiredTogether 플래그 목록을 동반 지정하도록 지정합니다. 하나라도 지정되면 모두 지정되어야 합니다.
+func (f *FlagSet) MarkFlagsRequiredTogether(names ...string) {
+	f.requiredTogether = append(f.requiredTogether, names)
+}
+
 // Validate required 플래그 누락 및 검증 함수 실행을 확인합니다.
 func (f *FlagSet) Validate() error {
+	// 1. 환경변수 및 설정파일 바인딩 처리 (우선순위 체인)
+	for _, flag := range f.flags {
+		if flag.wasSet {
+			continue
+		}
+
+		// (1) 환경변수 바인딩 검사 및 설정
+		if flag.envName != "" {
+			if val, exists := os.LookupEnv(flag.envName); exists {
+				if err := f.setFlagValue(flag, val, fmt.Sprintf("env %s", flag.envName)); err != nil {
+					return err
+				}
+				continue // 환경변수가 세팅되면 설정파일보다 우선순위가 높음
+			}
+		}
+
+		// (2) 설정파일 바인딩 검사 및 설정
+		if flag.configKey != "" {
+			if val := Get(flag.configKey); val != nil {
+				var valStr string
+				switch v := val.(type) {
+				case string:
+					valStr = v
+				default:
+					valStr = fmt.Sprintf("%v", v)
+				}
+				if err := f.setFlagValue(flag, valStr, fmt.Sprintf("config %s", flag.configKey)); err != nil {
+					return err
+				}
+			}
+		}
+	}
+
+	// 2. 상호 배제 검증
+	for _, group := range f.exclusiveGroups {
+		var setNames []string
+		for _, name := range group {
+			if flag, ok := f.flags[name]; ok && flag.wasSet {
+				setNames = append(setNames, fmt.Sprintf("--%s", name))
+			}
+		}
+		if len(setNames) > 1 {
+			return &ValidationError{
+				FlagName: group[0],
+				Err:      fmt.Errorf("flags %s are mutually exclusive", strings.Join(setNames, " and ")),
+			}
+		}
+	}
+
+	// 3. 필수 동반 지정 검증
+	for _, group := range f.requiredTogether {
+		var anySet bool
+		var allSet = true
+		var missing []string
+		for _, name := range group {
+			if flag, ok := f.flags[name]; ok {
+				if flag.wasSet {
+					anySet = true
+				} else {
+					allSet = false
+					missing = append(missing, fmt.Sprintf("--%s", name))
+				}
+			}
+		}
+		if anySet && !allSet {
+			return &ValidationError{
+				FlagName: group[0],
+				Err: fmt.Errorf("if any of %s are set, all must be set (missing: %s)",
+					strings.Join(group, ", "), strings.Join(missing, ", ")),
+			}
+		}
+	}
+
+	// 4. 필수 플래그 누락 및 개별 검증 검사
 	for _, flag := range f.flags {
 		if flag.required && !flag.wasSet {
-			return fmt.Errorf("required flag '--%s' not set", flag.Name)
+			return &ValidationError{
+				FlagName: flag.Name,
+				Err:      fmt.Errorf("required flag '--%s' not set", flag.Name),
+			}
 		}
 		if flag.wasSet && flag.validate != nil {
 			val := flag.stringVal()
 			if err := flag.validate(val); err != nil {
-				return fmt.Errorf("flag '--%s': %w", flag.Name, err)
+				return &ValidationError{
+					FlagName: flag.Name,
+					Err:      err,
+				}
 			}
 		}
 	}
@@ -221,7 +336,7 @@ func (f *FlagSet) Parse(args []string) ([]string, error) {
 			}
 			flag, ok := f.flags[name]
 			if !ok {
-				return nil, fmt.Errorf("unknown flag: --%s", name)
+				return nil, &FlagError{FlagName: name, Err: fmt.Errorf("unknown flag: --%s", name)}
 			}
 			var err error
 			if hasInline {
@@ -243,7 +358,7 @@ func (f *FlagSet) Parse(args []string) ([]string, error) {
 			}
 			flag, ok := f.shorts[short]
 			if !ok {
-				return nil, fmt.Errorf("unknown flag: -%s", short)
+				return nil, &FlagError{FlagName: short, Err: fmt.Errorf("unknown flag: -%s", short)}
 			}
 			var err error
 			if hasInline {
@@ -269,7 +384,7 @@ func (f *FlagSet) parseValue(idx int, args []string, flag *Flag) (int, error) {
 	}
 
 	if idx+1 >= len(args) {
-		return idx, fmt.Errorf("flag '%s' requires a value", args[idx])
+		return idx, &FlagError{FlagName: flag.Name, Err: fmt.Errorf("flag '%s' requires a value", args[idx])}
 	}
 
 	val := args[idx+1]
@@ -289,26 +404,26 @@ func (f *FlagSet) setFlagValue(flag *Flag, val string, flagArg string) error {
 		case "false", "0", "no":
 			*flag.valueBool = false
 		default:
-			return fmt.Errorf("invalid boolean value for flag '%s': %s", flagArg, val)
+			return &FlagError{FlagName: flag.Name, Err: fmt.Errorf("invalid boolean value for flag '%s': %s", flagArg, val)}
 		}
 	case TypeString:
 		*flag.valueStr = val
 	case TypeInt:
 		parsedInt, err := strconv.Atoi(val)
 		if err != nil {
-			return fmt.Errorf("invalid integer value for flag '%s': %s", flagArg, val)
+			return &FlagError{FlagName: flag.Name, Err: fmt.Errorf("invalid integer value for flag '%s': %s", flagArg, val)}
 		}
 		*flag.valueInt = parsedInt
 	case TypeFloat64:
 		parsedFloat, err := strconv.ParseFloat(val, 64)
 		if err != nil {
-			return fmt.Errorf("invalid float64 value for flag '%s': %s", flagArg, val)
+			return &FlagError{FlagName: flag.Name, Err: fmt.Errorf("invalid float64 value for flag '%s': %s", flagArg, val)}
 		}
 		*flag.valueFloat64 = parsedFloat
 	case TypeDuration:
 		parsedDur, err := time.ParseDuration(val)
 		if err != nil {
-			return fmt.Errorf("invalid duration value for flag '%s': %s (example: 30s, 1h30m)", flagArg, val)
+			return &FlagError{FlagName: flag.Name, Err: fmt.Errorf("invalid duration value for flag '%s': %s (example: 30s, 1h30m)", flagArg, val)}
 		}
 		*flag.valueDuration = parsedDur
 	case TypeStringSlice:

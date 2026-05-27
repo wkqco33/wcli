@@ -10,6 +10,8 @@
 - **데이터 중심**: 직관적인 `Command` 구조체로 명령어 트리 구성
 - **Rich 텍스트 출력**: 마크업 기반 터미널 컬러/스타일 지원, TTY 자동 감지
 - **Cobra 호환 API**: `Persistent` 플래그/훅, 서브커맨드 별칭, `--name=value` 문법 등
+- **구조화된 에러 처리**: `FlagError`, `ValidationError` 등 정밀한 디버깅 및 세부 속성 추출 지원
+- **경량 로깅 서브패키지**: 런타임 오버헤드가 극히 적은 콘솔 로깅 및 동적 로그 레벨 제어 분리 제공
 
 ## 빠른 시작
 
@@ -274,16 +276,170 @@ make clean       # 빌드 아티팩트 제거
 
 ## 에러 처리
 
+`wcli`는 구체적인 원인 추적이 가능하도록 구조화된 에러 타입들을 제공합니다. `errors.As`를 통해 에러 원인을 분기하여 구체적인 속성에 접근할 수 있습니다.
+
+- `*wcli.FlagError`: 옵션/플래그 입력 구문 에러 (알 수 없는 플래그, 잘못된 형태 등)
+- `*wcli.ValidationError`: 플래그 값 유효성 및 필수 제약 조건 실패 에러
+- `*wcli.CommandError`: 훅 실행 도중 발생한 에러 및 라이브러리 내부 에러
+
 ```go
-var (
-    ErrCommandNotFound = errors.New("command not found")
-    ErrHelp            = errors.New("help requested")  // Execute()에서 nil로 변환
+cmd := &wcli.Command{
+    SilenceErrors: true,  // 에러 화면 자동 출력 억제
+    Run: func(ctx *wcli.Context) error {
+        return fmt.Errorf("일반 비즈니스 에러")
+    },
+}
+
+if err := cmd.Execute(os.Args[1:]); err != nil {
+    var flagErr *wcli.FlagError
+    if errors.As(err, &flagErr) {
+        fmt.Printf("플래그 에러 발생: %s\n", flagErr.FlagName)
+    }
+}
+```
+
+## 로깅 (Logging)
+
+성능 최우선 원칙에 따라 설계된 경량 로거 서브패키지 `logging`을 제공합니다. 
+
+```go
+import "github.com/seoyc/wcli/logging"
+
+func main() {
+    // 1. DefaultLogger 생성 및 전역 설정
+    logger := logging.NewDefaultLogger(os.Stderr, logging.LevelInfo, true)
+    logging.SetLogger(logger)
+
+    cmd := &wcli.Command{
+        Use: "app",
+        Run: func(ctx *wcli.Context) error {
+            // 2. 훅 내에서 context를 통해 전달받은 로거 사용
+            ctx.Logger.Log(logging.LevelInfo, "작업을 시작합니다.")
+            return nil
+        },
+    }
+    cmd.Execute(os.Args[1:])
+}
+```
+
+## 플래그 확장 조건 및 검증
+
+플래그 관계 제약 조건 및 환경 변수 자동 주입 기능을 내장하고 있습니다.
+
+### 환경 변수 자동 매핑 (BindEnv)
+특정 플래그가 지정되지 않은 경우, 대체해서 값을 읽어올 환경 변수를 지정합니다.
+```go
+cmd.Flags().StringVar(&token, "token", "t", "", "인증 토큰")
+// --token이 공백일 시 환경변수 API_TOKEN을 조회하여 바인딩
+_ = cmd.Flags().BindEnv("token", "API_TOKEN")
+```
+
+### 상호 배제 조건 지정 (Mutually Exclusive)
+지정된 옵션 그룹 중 하나만 전달되어야 하는 조건을 검증합니다.
+```go
+cmd.Flags().BoolVar(&jsonOut, "json", "j", false, "JSON 출력")
+cmd.Flags().BoolVar(&yamlOut, "yaml", "y", false, "YAML 출력")
+// --json과 --yaml을 동시에 설정 시 Validate 단계에서 에러 발생
+cmd.Flags().MarkFlagsMutuallyExclusive("json", "yaml")
+```
+
+### 필수 동반 조건 지정 (Required Together)
+하나라도 설정되면 그룹 내 모든 플래그가 함께 설정되어야 하는 조건입니다.
+```go
+cmd.Flags().StringVar(&user, "user", "u", "", "계정")
+cmd.Flags().StringVar(&pass, "password", "p", "", "비밀번호")
+// --user 또는 --password 중 하나라도 주어지면 둘 다 필수로 동작
+cmd.Flags().MarkFlagsRequiredTogether("user", "password")
+```
+
+### 설정 파일 매핑 (BindConfig)
+외부 구성 파일(JSON, INI)의 값을 플래그에 매핑하여 자동으로 읽어올 수 있습니다. `wcli`는 다음과 같은 우선순위 체인(우선순위 연동 사슬)을 지원합니다:
+`입력된 플래그 > 바인딩된 환경변수 > 설정 파일 내 매핑값 > 기본값(Default)`
+
+의존성 오버헤드를 막기 위해 외부 YAML 파서 등을 사용하지 않고, Go 표준 패키지(`encoding/json`)와 한 줄씩 파싱하는 경량 INI 파서를 직접 내장 구현했습니다. 성능 하락을 방지하기 위해 파일 실시간 감지(Hot Reload)를 생략하고 CLI 실행 시점에 1회만 설정 파일을 파싱합니다.
+
+```go
+package main
+
+import (
+    "fmt"
+    "os"
+    "github.com/seoyc/wcli"
 )
 
+func main() {
+    // 1. 설정 파일 설정 및 로드 (JSON 또는 INI 지원)
+    wcli.SetConfigFile("config.json")
+    wcli.SetConfigType("json")
+    if err := wcli.ReadInConfig(); err != nil {
+        fmt.Printf("설정 파일 읽기 실패: %v\n", err)
+        os.Exit(1)
+    }
+
+    var dbHost string
+    cmd := &wcli.Command{
+        Use: "app",
+        Run: func(ctx *wcli.Context) error {
+            fmt.Printf("Database Host: %s\n", dbHost)
+            return nil
+        },
+    }
+
+    cmd.Flags().StringVar(&dbHost, "host", "H", "localhost", "데이터베이스 호스트")
+
+    // 2. 환경변수 및 설정파일 키 매핑 (점 표기법 지원)
+    _ = cmd.Flags().BindEnv("host", "DB_HOST")
+    _ = cmd.Flags().BindConfig("host", "database.host")
+
+    cmd.Execute(os.Args[1:])
+}
+```
+
+#### INI 형식 매핑
+INI 설정 파일인 경우 섹션 이름을 포함한 점 표기법(`section.key`)으로 매핑합니다.
+```ini
+[database]
+host = config-db-host
+port = 5432
+```
+```go
+wcli.SetConfigFile("config.ini")
+wcli.SetConfigType("ini")
+_ = wcli.ReadInConfig()
+
+cmd.Flags().BindConfig("host", "database.host")
+```
+
+## 셸 자동 완성 (Shell Autocomplete)
+
+`wcli.NewCompletionCommand`를 사용하여 빌드된 명령어에 대한 Zsh/Bash용 자동 완성 코드를 생성할 수 있습니다.
+
+```go
+func main() {
+    rootCmd := &wcli.Command{Use: "app", Run: func(ctx *wcli.Context) error { return nil }}
+    
+    // completion 서브커맨드 등록
+    rootCmd.AddCommand(wcli.NewCompletionCommand(rootCmd))
+    
+    rootCmd.Execute(os.Args[1:])
+}
+```
+
+## 커스텀 도움말 템플릿 (Template Help)
+
+`text/template` 형식을 사용해 도움말 레이아웃을 마음대로 변경할 수 있습니다. 템플릿 컴파일 결과는 패키지 단에서 캐싱되므로 매 출력 시 성능 저하가 없습니다.
+
+```go
+const myHelpTemplate = `[bold][cyan]⚡ {{.Name}} 도움말[/cyan][/bold]
+{{.Short}}
+
+사용법:
+  {{.UsageLine}}
+`
+
 cmd := &wcli.Command{
-    SilenceErrors: true,  // 에러 자동 출력 억제
-    Run: func(ctx *wcli.Context) error {
-        return fmt.Errorf("커스텀 에러")
-    },
+    Use:          "app",
+    Short:        "설명",
+    HelpTemplate: myHelpTemplate, // 템플릿 주입
 }
 ```

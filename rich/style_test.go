@@ -98,4 +98,3 @@ func TestSprint(t *testing.T) {
 		t.Errorf("Sprint() = %q, want %q", sprintResult, result)
 	}
 }
-

@@ -8,6 +8,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/seoyc/wcli/logging"
 	"github.com/seoyc/wcli/rich"
 )
 
@@ -21,16 +22,21 @@ var (
 // Context 명령어 실행 시 전달되는 컨텍스트
 type Context struct {
 	context.Context
-	Args []string
+	Args   []string
+	Logger logging.Logger
 }
 
 // Command CLI 명령어를 정의하는 구조체
 type Command struct {
-	Use     string
-	Short   string
-	Long    string
-	Aliases []string // 커맨드 이름의 별칭 목록
-	Version string   // 설정 시 --version 플래그 자동 등록
+	Use          string
+	Short        string
+	Long         string
+	Aliases      []string // 커맨드 이름의 별칭 목록
+	Version      string   // 설정 시 --version 플래그 자동 등록
+	HelpTemplate string   // 설정 시 기본 도움말 대신 템플릿으로 출력
+
+	// Logger 명령어 실행 시 사용할 로거
+	Logger logging.Logger
 
 	// 실행 훅: PreRun → Run → PostRun 순서로 호출됨
 	PreRun  func(ctx *Context) error
@@ -61,6 +67,16 @@ type Command struct {
 	commands   []*Command
 	commandMap map[string]*Command // 이름/별칭 → 커맨드 (O(1) 라우팅)
 	parent     *Command
+}
+
+func (c *Command) getLogger() logging.Logger {
+	if c.Logger != nil {
+		return c.Logger
+	}
+	if c.parent != nil {
+		return c.parent.getLogger()
+	}
+	return logging.GetLogger()
 }
 
 // outWriter OutWriter가 설정되어 있으면 반환, 아니면 os.Stdout
@@ -125,26 +141,36 @@ func (c *Command) AddCommand(cmds ...*Command) {
 
 // Execute 인자를 받아 플래그를 파싱하고 명령어를 실행
 func (c *Command) Execute(args []string) error {
+	logger := c.getLogger()
 	ctx := &Context{
 		Context: context.Background(),
 		Args:    args,
+		Logger:  logger,
 	}
+	logger.Log(logging.LevelDebug, "Executing command %q with args: %v", c.Name(), args)
+
 	err := c.execute(ctx)
 	if err != nil {
 		if errors.Is(err, ErrHelp) {
+			logger.Log(logging.LevelDebug, "Command %q execution interrupted: help requested", c.Name())
 			return nil // 도움말 출력 후 정상 종료
 		}
+		logger.Log(logging.LevelError, "Command %q failed: %v", c.Name(), err)
 		if !c.SilenceErrors {
 			rich.Fprintln(c.errWriter(), "[red][bold]Error:[/bold] %s[/red]", err.Error())
 		}
+	} else {
+		logger.Log(logging.LevelDebug, "Command %q executed successfully", c.Name())
 	}
 	return err
 }
 
 func (c *Command) execute(ctx *Context) error {
+	logger := ctx.Logger
 	// 1. 하위 명령어가 있는지 확인 (O(1) 맵 조회)
 	if len(ctx.Args) > 0 {
 		if sub, ok := c.commandMap[ctx.Args[0]]; ok {
+			logger.Log(logging.LevelDebug, "Routing command from %q to sub-command %q", c.Name(), sub.Name())
 			// 부모의 OutWriter/ErrWriter를 자식에게 전파
 			if sub.OutWriter == nil && c.OutWriter != nil {
 				sub.OutWriter = c.OutWriter
@@ -159,12 +185,14 @@ func (c *Command) execute(ctx *Context) error {
 
 	// 2. --version 플래그 확인
 	if c.Version != "" && c.isVersionRequested(ctx.Args) {
+		logger.Log(logging.LevelDebug, "Version flag detected on command %q", c.Name())
 		fmt.Fprintln(c.outWriter(), c.Version)
 		return ErrHelp
 	}
 
 	// 3. -h, --help 플래그 확인 (플래그 값 오탐 방지)
 	if c.isHelpRequested(ctx.Args) {
+		logger.Log(logging.LevelDebug, "Help flag detected on command %q", c.Name())
 		c.help(c.outWriter())
 		return ErrHelp
 	}
@@ -172,11 +200,18 @@ func (c *Command) execute(ctx *Context) error {
 	// 4. 플래그 파싱 (조상의 persistent + 자신의 persistent + 로컬)
 	combined := c.buildCombinedFlagSet()
 	if combined != nil {
+		logger.Log(logging.LevelDebug, "Parsing flags for command %q", c.Name())
 		remainingArgs, err := combined.Parse(ctx.Args)
 		if err != nil {
+			if flagErr, ok := err.(*FlagError); ok {
+				flagErr.CommandName = c.Name()
+			}
 			return err
 		}
 		if err := combined.Validate(); err != nil {
+			if valErr, ok := err.(*ValidationError); ok {
+				valErr.CommandName = c.Name()
+			}
 			return err
 		}
 		ctx.Args = remainingArgs
@@ -184,6 +219,7 @@ func (c *Command) execute(ctx *Context) error {
 
 	// 5. PersistentPreRun 훅 실행 (루트 → 현재 순서)
 	for _, hook := range c.collectPersistentPreRuns() {
+		logger.Log(logging.LevelDebug, "Running PersistentPreRun for command %q", c.Name())
 		if err := hook(ctx); err != nil {
 			return err
 		}
@@ -191,6 +227,7 @@ func (c *Command) execute(ctx *Context) error {
 
 	// 6. PreRun 훅 실행
 	if c.PreRun != nil {
+		logger.Log(logging.LevelDebug, "Running PreRun for command %q", c.Name())
 		if err := c.PreRun(ctx); err != nil {
 			return err
 		}
@@ -198,19 +235,22 @@ func (c *Command) execute(ctx *Context) error {
 
 	// 7. 명령어 실행
 	if c.Run != nil {
+		logger.Log(logging.LevelDebug, "Running main function for command %q", c.Name())
 		if err := c.Run(ctx); err != nil {
 			return err
 		}
 	} else if len(c.commands) > 0 {
 		// Run이 없고 하위 명령어가 있는 경우 도움말 출력
+		logger.Log(logging.LevelDebug, "No Run defined, showing help for command %q", c.Name())
 		c.help(c.outWriter())
 		return ErrHelp
 	} else {
-		return fmt.Errorf("no Run function defined for command: %s", c.Use)
+		return &CommandError{CommandName: c.Name(), Err: fmt.Errorf("no Run function defined for command: %s", c.Use)}
 	}
 
 	// 8. PostRun 훅 실행
 	if c.PostRun != nil {
+		logger.Log(logging.LevelDebug, "Running PostRun for command %q", c.Name())
 		if err := c.PostRun(ctx); err != nil {
 			return err
 		}
@@ -218,6 +258,7 @@ func (c *Command) execute(ctx *Context) error {
 
 	// 9. PersistentPostRun 훅 실행 (현재 → 루트 순서)
 	for _, hook := range c.collectPersistentPostRuns() {
+		logger.Log(logging.LevelDebug, "Running PersistentPostRun for command %q", c.Name())
 		if err := hook(ctx); err != nil {
 			return err
 		}
