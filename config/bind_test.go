@@ -143,3 +143,37 @@ func TestLoad_NonPointer(t *testing.T) {
 		t.Fatal("비포인터 target에서 에러가 발생해야 합니다")
 	}
 }
+
+func TestLoadPointer(t *testing.T) {
+	yamlContent := "PORT: 9090\nTEMP: 0.85\nSTOP: AI assistant\n"
+	if err := os.WriteFile("test_pointer.yaml", []byte(yamlContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove("test_pointer.yaml")
+
+	type ptrCfg struct {
+		Port *int     `wcli:"PORT"`
+		Temp *float64 `wcli:"TEMP"`
+		Stop *string  `wcli:"STOP"`
+		Seed *int     `wcli:"SEED"` // 지정하지 않은 필드는 nil이어야 함
+	}
+
+	var cfg ptrCfg
+	if err := config.Load(&cfg, config.WithFiles("test_pointer.yaml")); err != nil {
+		t.Fatalf("Load 실패: %v", err)
+	}
+
+	if cfg.Port == nil || *cfg.Port != 9090 {
+		t.Errorf("Port: 예상 9090, 실제 %v", cfg.Port)
+	}
+	if cfg.Temp == nil || *cfg.Temp != 0.85 {
+		t.Errorf("Temp: 예상 0.85, 실제 %v", cfg.Temp)
+	}
+	if cfg.Stop == nil || *cfg.Stop != "AI assistant" {
+		t.Errorf("Stop: 예상 'AI assistant', 실제 %v", cfg.Stop)
+	}
+	if cfg.Seed != nil {
+		t.Errorf("Seed: 지정하지 않았으므로 nil이어야 함, 실제 %v", cfg.Seed)
+	}
+}
+

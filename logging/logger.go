@@ -86,10 +86,12 @@ func (l *DefaultLogger) Log(level LogLevel, format string, args ...any) {
 	}
 
 	if l.UseMarkup {
-		rich.Fprintln(l.Writer, "%s [%s] %s", timeStr, level.markup(), msg)
+		rich.Fprintln(l.Writer, "%s \\[%s] %s", timeStr, level.markup(), msg)
 	} else {
 		fmt.Fprintf(l.Writer, "%s [%s] %s\n", timeStr, level.String(), msg)
 	}
+
+
 }
 
 // NoOpLogger 아무 작동도 하지 않는 빈 로거 (기본값 설정용)
@@ -113,3 +115,24 @@ func SetLogger(l Logger) {
 func GetLogger() Logger {
 	return globalLogger
 }
+
+// Debug 디버그 레벨 로그를 기록합니다.
+func Debug(format string, args ...any) {
+	globalLogger.Log(LevelDebug, format, args...)
+}
+
+// Info 인포 레벨 로그를 기록합니다.
+func Info(format string, args ...any) {
+	globalLogger.Log(LevelInfo, format, args...)
+}
+
+// Warn 워닝 레벨 로그를 기록합니다.
+func Warn(format string, args ...any) {
+	globalLogger.Log(LevelWarn, format, args...)
+}
+
+// Error 에러 레벨 로그를 기록합니다.
+func Error(format string, args ...any) {
+	globalLogger.Log(LevelError, format, args...)
+}
+

@@ -469,3 +469,12 @@ func (f *FlagSet) All() []*Flag {
 	f.sorted = result
 	return result
 }
+
+// Changed 해당 이름의 플래그가 CLI 인자, 환경변수 또는 설정파일 등을 통해 명시적으로 설정되었는지 여부를 반환합니다.
+func (f *FlagSet) Changed(name string) bool {
+	if flag, ok := f.flags[name]; ok {
+		return flag.wasSet
+	}
+	return false
+}
+

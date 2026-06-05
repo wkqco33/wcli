@@ -122,6 +122,17 @@ func (c *Command) PersistentFlags() *FlagSet {
 	return c.persistentFlags
 }
 
+// FlagsChanged 로컬 플래그 또는 Persistent 플래그 중 해당 이름의 플래그가 설정되었는지 여부를 반환합니다.
+func (c *Command) FlagsChanged(name string) bool {
+	if c.flags != nil && c.flags.Changed(name) {
+		return true
+	}
+	if c.persistentFlags != nil && c.persistentFlags.Changed(name) {
+		return true
+	}
+	return false
+}
+
 // AddCommand 하위 명령어를 추가
 func (c *Command) AddCommand(cmds ...*Command) {
 	if c.commandMap == nil {
