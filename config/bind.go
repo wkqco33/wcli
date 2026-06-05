@@ -294,6 +294,13 @@ func bindStruct(structVal reflect.Value, data map[string]any, rootData map[strin
 }
 
 func setFieldValue(field reflect.Value, value any) error {
+	if field.Kind() == reflect.Ptr {
+		if field.IsNil() {
+			field.Set(reflect.New(field.Type().Elem()))
+		}
+		return setFieldValue(field.Elem(), value)
+	}
+
 	valStr := fmt.Sprintf("%v", value)
 
 	switch field.Kind() {
