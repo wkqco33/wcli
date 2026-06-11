@@ -49,21 +49,21 @@ const DefaultHelpTemplate = `{{if .Long}}{{.Long}}{{else}}{{.Short}}{{end}}
 var templateCache sync.Map // map[string]*template.Template
 
 type helpData struct {
-	Use            string
-	Name           string
-	Short          string
-	Long           string
-	Version        string
-	UsageLine      string
-	Aliases        []string
-	HasSubCommands bool
-	SubCommands    []subCommandHelpData
-	HasGroupedCmds bool
-	GroupedCmds    []commandGroupData
-	HasLocalFlags  bool
-	LocalFlags     []flagHelpData
-	HasGlobalFlags bool
-	GlobalFlags    []flagHelpData
+	Use              string
+	Name             string
+	Short            string
+	Long             string
+	Version          string
+	UsageLine        string
+	Aliases          []string
+	HasSubCommands   bool
+	SubCommands      []subCommandHelpData
+	HasGroupedCmds   bool
+	GroupedCmds      []commandGroupData
+	HasLocalFlags    bool
+	LocalFlags       []flagHelpData
+	HasGlobalFlags   bool
+	GlobalFlags      []flagHelpData
 	HasFlagGroupNote bool
 	FlagGroupNotes   []string // ["mutually exclusive: --json, --yaml"]
 }

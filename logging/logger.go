@@ -91,7 +91,6 @@ func (l *DefaultLogger) Log(level LogLevel, format string, args ...any) {
 		fmt.Fprintf(l.Writer, "%s [%s] %s\n", timeStr, level.String(), msg)
 	}
 
-
 }
 
 // NoOpLogger 아무 작동도 하지 않는 빈 로거 (기본값 설정용)
@@ -135,4 +134,3 @@ func Warn(format string, args ...any) {
 func Error(format string, args ...any) {
 	globalLogger.Log(LevelError, format, args...)
 }
-

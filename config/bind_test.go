@@ -176,4 +176,3 @@ func TestLoadPointer(t *testing.T) {
 		t.Errorf("Seed: 지정하지 않았으므로 nil이어야 함, 실제 %v", cfg.Seed)
 	}
 }
-
