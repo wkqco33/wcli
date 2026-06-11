@@ -104,10 +104,10 @@ func TestDetectWcliPath(t *testing.T) {
 	defer cleanup()
 
 	tests := []struct {
-		name        string
-		gitmodules  string
-		wantPath    string
-		wantErr     bool
+		name       string
+		gitmodules string
+		wantPath   string
+		wantErr    bool
 	}{
 		{
 			name: "정상 탐지",
