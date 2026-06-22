@@ -152,26 +152,33 @@ func WriteDefault(target any, path string) error {
 // --- 내부 로직 ---
 
 func loadBindSource(src configSource) (map[string]any, error) {
+	var raw map[string]any
+	var err error
 	switch src.stype {
 	case sourceEnv:
-		return loadSystemEnv()
+		raw, err = loadSystemEnv()
 	case sourceDotEnv:
-		return loadDotEnvFile(src.path)
+		raw, err = loadDotEnvFile(src.path)
 	case sourceYAML:
 		content, err := os.ReadFile(src.path)
 		if err != nil {
 			return nil, err
 		}
-		return parseYAMLContent(string(content))
+		raw, err = parseYAMLContent(string(content))
 	case sourceTOML:
 		content, err := os.ReadFile(src.path)
 		if err != nil {
 			return nil, err
 		}
-		return parseTOMLContent(string(content))
+		raw, err = parseTOMLContent(string(content))
 	default:
 		return nil, fmt.Errorf("unsupported source type: %v", src.stype)
 	}
+
+	if err != nil {
+		return nil, err
+	}
+	return NormalizeKeys(raw).(map[string]any), nil
 }
 
 func loadSystemEnv() (map[string]any, error) {
@@ -251,7 +258,7 @@ func bindStruct(structVal reflect.Value, data map[string]any, rootData map[strin
 		// 뒤에 오는 소스가 앞의 값을 덮어씁니다.
 
 		// 1. 파일 소스 데이터에서 조회 (yaml/toml/dotenv 등)
-		rawValue, exists = data[tag]
+		rawValue, exists = data[strings.ToLower(tag)]
 
 		// 2. 시스템 환경변수가 있으면 최우선 적용 (파일 데이터를 덮어씀)
 		if envVal, envExists := os.LookupEnv(strings.ToUpper(fullKey)); envExists {
@@ -259,12 +266,17 @@ func bindStruct(structVal reflect.Value, data map[string]any, rootData map[strin
 			exists = true
 		}
 
-		// 3. 위 두 소스 모두 없을 때 rootData 평탄화 조회 (대문자 키 매칭)
+		// 3. 위 두 소스 모두 없을 때 rootData 평탄화 조회
 		if !exists {
-			rawValue, exists = rootData[strings.ToUpper(fullKey)]
+			rawValue, exists = rootData[strings.ToLower(fullKey)]
 		}
 
-		// 4. 모든 소스에 없을 때 default 태그 폴백
+		// 4. 여전히 없을 때 언더스코어(_)로 연결된 키를 기반으로 중첩 조회 시도
+		if !exists && strings.Contains(fullKey, "_") {
+			rawValue, exists = getNestedValByUnderscore(rootData, fullKey)
+		}
+
+		// 5. 모든 소스에 없을 때 default 태그 폴백
 		if !exists {
 			if defaultVal := fieldType.Tag.Get("default"); defaultVal != "" {
 				rawValue = defaultVal
@@ -291,6 +303,23 @@ func bindStruct(structVal reflect.Value, data map[string]any, rootData map[strin
 	}
 
 	return nil
+}
+
+func getNestedValByUnderscore(data map[string]any, key string) (any, bool) {
+	parts := strings.Split(strings.ToLower(key), "_")
+	var current any = data
+	for _, part := range parts {
+		m, ok := current.(map[string]any)
+		if !ok {
+			return nil, false
+		}
+		val, exists := m[part]
+		if !exists {
+			return nil, false
+		}
+		current = val
+	}
+	return current, true
 }
 
 func setFieldValue(field reflect.Value, value any) error {
@@ -337,6 +366,33 @@ func setFieldValue(field reflect.Value, value any) error {
 			return err
 		}
 		field.SetBool(v)
+	case reflect.Slice:
+		var rawItems []string
+		switch v := value.(type) {
+		case []any:
+			for _, item := range v {
+				rawItems = append(rawItems, fmt.Sprintf("%v", item))
+			}
+		case []string:
+			rawItems = v
+		default:
+			parts := strings.Split(valStr, ",")
+			for _, part := range parts {
+				trimmed := strings.TrimSpace(part)
+				if trimmed != "" {
+					rawItems = append(rawItems, trimmed)
+				}
+			}
+		}
+
+		sliceVal := reflect.MakeSlice(field.Type(), len(rawItems), len(rawItems))
+		for i, item := range rawItems {
+			elem := sliceVal.Index(i)
+			if err := setFieldValue(elem, item); err != nil {
+				return fmt.Errorf("slice element %d: %w", i, err)
+			}
+		}
+		field.Set(sliceVal)
 	default:
 		return fmt.Errorf("unsupported field type: %v", field.Kind())
 	}

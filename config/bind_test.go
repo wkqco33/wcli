@@ -2,6 +2,7 @@ package config_test
 
 import (
 	"os"
+	"reflect"
 	"testing"
 
 	"github.com/seoyc/wcli/config"
@@ -174,5 +175,53 @@ func TestLoadPointer(t *testing.T) {
 	}
 	if cfg.Seed != nil {
 		t.Errorf("Seed: 지정하지 않았으므로 nil이어야 함, 실제 %v", cfg.Seed)
+	}
+}
+
+func TestLoadCaseInsensitivity(t *testing.T) {
+	yamlContent := "host: case.example.com\ndebug: false\ndatabase:\n  pass: my-secret-key\n"
+	if err := os.WriteFile("test_case.yaml", []byte(yamlContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove("test_case.yaml")
+
+	var cfg testBindConfig
+	if err := config.Load(&cfg, config.WithFiles("test_case.yaml")); err != nil {
+		t.Fatalf("Load 실패: %v", err)
+	}
+
+	if cfg.Host != "case.example.com" {
+		t.Errorf("Host (소문자 파싱/대문자 바인딩): 예상 case.example.com, 실제 %s", cfg.Host)
+	}
+	if cfg.DB.Pass != "my-secret-key" {
+		t.Errorf("DB.Pass (소문자 중첩 파싱): 예상 my-secret-key, 실제 %s", cfg.DB.Pass)
+	}
+}
+
+func TestLoadSliceBinding(t *testing.T) {
+	yamlContent := "ips: 127.0.0.1, 10.0.0.1, 192.168.0.1\nports: 80, 443, 8080\n"
+	if err := os.WriteFile("test_slice.yaml", []byte(yamlContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove("test_slice.yaml")
+
+	type sliceCfg struct {
+		IPs   []string `wcli:"IPS"`
+		Ports []int    `wcli:"PORTS"`
+	}
+
+	var cfg sliceCfg
+	if err := config.Load(&cfg, config.WithFiles("test_slice.yaml")); err != nil {
+		t.Fatalf("Load 실패: %v", err)
+	}
+
+	expectedIPs := []string{"127.0.0.1", "10.0.0.1", "192.168.0.1"}
+	if !reflect.DeepEqual(cfg.IPs, expectedIPs) {
+		t.Errorf("IPs 바인딩 실패: %v, 기대: %v", cfg.IPs, expectedIPs)
+	}
+
+	expectedPorts := []int{80, 443, 8080}
+	if !reflect.DeepEqual(cfg.Ports, expectedPorts) {
+		t.Errorf("Ports 바인딩 실패: %v, 기대: %v", cfg.Ports, expectedPorts)
 	}
 }
