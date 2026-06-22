@@ -80,18 +80,25 @@ func (c *Command) getLogger() logging.Logger {
 	return logging.GetLogger()
 }
 
-// outWriter OutWriter가 설정되어 있으면 반환, 아니면 os.Stdout
+// outWriter OutWriter가 설정되어 있으면 반환, 없으면 부모 체인을 거슬러 탐색, 최종 기본값은 os.Stdout.
+// 자식 커맨드 구조체를 변경하지 않고 실행 시점에 효과적인 Writer를 결정합니다.
 func (c *Command) outWriter() io.Writer {
 	if c.OutWriter != nil {
 		return c.OutWriter
 	}
+	if c.parent != nil {
+		return c.parent.outWriter()
+	}
 	return os.Stdout
 }
 
-// errWriter ErrWriter가 설정되어 있으면 반환, 아니면 os.Stderr
+// errWriter ErrWriter가 설정되어 있으면 반환, 없으면 부모 체인을 거슬러 탐색, 최종 기본값은 os.Stderr.
 func (c *Command) errWriter() io.Writer {
 	if c.ErrWriter != nil {
 		return c.ErrWriter
+	}
+	if c.parent != nil {
+		return c.parent.errWriter()
 	}
 	return os.Stderr
 }
@@ -183,13 +190,7 @@ func (c *Command) execute(ctx *Context) error {
 	if len(ctx.Args) > 0 {
 		if sub, ok := c.commandMap[ctx.Args[0]]; ok {
 			logger.Log(logging.LevelDebug, "Routing command from %q to sub-command %q", c.Name(), sub.Name())
-			// 부모의 OutWriter/ErrWriter를 자식에게 전파
-			if sub.OutWriter == nil && c.OutWriter != nil {
-				sub.OutWriter = c.OutWriter
-			}
-			if sub.ErrWriter == nil && c.ErrWriter != nil {
-				sub.ErrWriter = c.ErrWriter
-			}
+			// Writer는 자식 구조체를 변경하지 않고 outWriter()/errWriter()의 부모 체인 탐색으로 상속됨
 			ctx.Args = ctx.Args[1:]
 			return sub.execute(ctx)
 		}

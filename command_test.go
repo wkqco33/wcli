@@ -73,6 +73,42 @@ func TestOutWriter(t *testing.T) {
 	}
 }
 
+// TestSubCommandInheritsWriter 하위 커맨드가 부모의 OutWriter를 상속하되,
+// 자식 구조체 필드는 변경되지 않아야 한다(멱등성/동시성 안전).
+func TestSubCommandInheritsWriter(t *testing.T) {
+	var buf bytes.Buffer
+	sub := &wcli.Command{
+		Use: "child",
+		Run: func(ctx *wcli.Context) error { return nil },
+	}
+	root := &wcli.Command{
+		Use:       "root",
+		OutWriter: &buf,
+	}
+	root.AddCommand(sub)
+
+	if err := root.Execute([]string{"child", "--help"}); err != nil {
+		t.Fatalf("실행 실패: %v", err)
+	}
+	if !strings.Contains(buf.String(), "Usage:") {
+		t.Errorf("자식 도움말이 부모 OutWriter로 출력되어야 함. 출력: %q", buf.String())
+	}
+	// 자식 구조체 필드는 건드리면 안 됨
+	if sub.OutWriter != nil {
+		t.Error("자식 OutWriter 필드가 실행 중 변경됨(mutation 발생)")
+	}
+
+	// 두 번째 실행에 다른 Writer를 줘도 첫 실행의 Writer가 남아 오염시키지 않아야 함
+	var buf2 bytes.Buffer
+	root.OutWriter = &buf2
+	if err := root.Execute([]string{"child", "--help"}); err != nil {
+		t.Fatalf("재실행 실패: %v", err)
+	}
+	if !strings.Contains(buf2.String(), "Usage:") {
+		t.Errorf("재실행 시 새 OutWriter로 출력되어야 함. 출력: %q", buf2.String())
+	}
+}
+
 func TestPersistentFlags(t *testing.T) {
 	var verbose bool
 	var output string

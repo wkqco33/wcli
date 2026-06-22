@@ -230,6 +230,9 @@ func (f *FlagSet) merge(other *FlagSet) {
 			f.shorts[flag.Shorthand] = flag
 		}
 	}
+	// 그룹 제약(상호 배제/필수 동반)도 함께 병합해야 combined FlagSet의 Validate()에서 검증됨
+	f.exclusiveGroups = append(f.exclusiveGroups, other.exclusiveGroups...)
+	f.requiredTogether = append(f.requiredTogether, other.requiredTogether...)
 	f.sorted = nil // 정렬 캐시 무효화
 }
 
