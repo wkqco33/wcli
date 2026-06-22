@@ -139,6 +139,28 @@ cmd := &wcli.Command{
 
 실행 순서: `(루트→현재) PersistentPreRun` → `PreRun` → `Run` → `PostRun` → `(현재→루트) PersistentPostRun`
 
+### 컨텍스트 주입 (ExecuteContext)
+
+취소·타임아웃·값 전파를 위해 외부 `context.Context`를 주입할 수 있습니다. 주입된 컨텍스트는 `ctx.Context`로 전달됩니다.
+
+```go
+ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+defer cancel()
+
+cmd := &wcli.Command{
+    Use: "app",
+    Run: func(ctx *wcli.Context) error {
+        select {
+        case <-ctx.Done():
+            return ctx.Err()  // 타임아웃/취소
+        default:
+            return doWork()
+        }
+    },
+}
+cmd.ExecuteContext(ctx, os.Args[1:])  // Execute(args)는 context.Background()를 사용
+```
+
 ### Fuzzy 커맨드 매칭
 
 오타가 있는 커맨드 입력 시 편집 거리 기반으로 유사 커맨드를 제안합니다.
@@ -216,9 +238,16 @@ cmd.Flags().SetValidation("port", func(val string) error {
 # --name=value 인라인 값
 app --output=file.txt --count=5 --verbose=false
 
+# 결합 단축 플래그: bool 단축 플래그를 묶고, 마지막에 값 플래그를 붙일 수 있음
+app -abc                 # -a -b -c (모두 bool)
+app -vofile.txt          # -v(bool) + -o=file.txt
+app -vo file.txt         # -v(bool) + -o file.txt
+
 # -- 종결자: 이후 모든 인자는 플래그로 해석하지 않음
 app --name foo -- --not-a-flag positional-arg
 ```
+
+> 다중 문자 단축키(예: `Shorthand: "vv"`)가 등록돼 있으면 결합 분해보다 우선합니다.
 
 ## 출력 제어
 
@@ -431,6 +460,12 @@ cmd.Flags().MarkFlagsRequiredTogether("user", "password")
 외부 의존성 없이 표준 라이브러리만으로 JSON, INI, YAML, TOML, .env를 파싱합니다.
 
 **지원 포맷:** `json`, `ini`, `yaml`/`yml`, `toml`, `env`
+
+> **파서 한계 (의도된 단순화):** YAML/TOML/INI 파서는 표준 라이브러리만으로 구현된 경량 파서입니다.
+> 복잡한 문법은 지원하지 않으니 단순한 키-값 + 중첩 구조 위주로 사용하세요. JSON은 표준 `encoding/json`을 사용하므로 제약이 없습니다.
+> - **미지원:** 배열/리스트(`- item`, `[a, b]`), 멀티라인 값, 앵커/별칭, 인라인 테이블, 값 안의 구분자(예: 따옴표로 감싼 `:`나 `=`)
+> - YAML 들여쓰기는 **공백만** 지원하며 탭은 인식하지 않습니다.
+> - 모든 스칼라 값은 **문자열**로 로드됩니다(타입 변환은 플래그 바인딩 시점에 수행).
 
 ```go
 import "github.com/seoyc/wcli/config"

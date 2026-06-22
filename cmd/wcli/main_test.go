@@ -195,6 +195,62 @@ func TestAddCmd_EmptyName(t *testing.T) {
 	}
 }
 
+// TestBuildInitCmd init 커맨드의 Run(Execute 경로)을 통해 프로젝트가 스캐폴딩되는지 검증한다.
+func TestBuildInitCmd(t *testing.T) {
+	tmpDir, cleanup := setupTmpDir(t)
+	defer cleanup()
+
+	cmd := buildInitCmd()
+	if err := cmd.Execute([]string{"--lib-path", "./wcli", "myorg/myapp"}); err != nil {
+		t.Fatalf("init 실행 실패: %v", err)
+	}
+	for _, file := range []string{"go.mod", "main.go", "Makefile"} {
+		if _, err := os.Stat(filepath.Join(tmpDir, file)); os.IsNotExist(err) {
+			t.Errorf("파일이 생성되지 않음: %s", file)
+		}
+	}
+	// 모듈 인자가 없으면 에러
+	if err := buildInitCmd().Execute(nil); err == nil {
+		t.Error("모듈명 없이 실행 시 에러가 발생해야 함")
+	}
+}
+
+// TestBuildAddCmd add 커맨드의 Run을 통해 서브커맨드 파일 생성 및 main.go 주입을 검증한다.
+func TestBuildAddCmd(t *testing.T) {
+	_, cleanup := setupTmpDir(t)
+	defer cleanup()
+
+	os.WriteFile("main.go", []byte("package main\nfunc main(){\n\t// wcli:commands\n}\n"), 0644)
+
+	if err := buildAddCmd().Execute([]string{"create"}); err != nil {
+		t.Fatalf("add 실행 실패: %v", err)
+	}
+	if _, err := os.Stat("create.go"); os.IsNotExist(err) {
+		t.Error("create.go가 생성되지 않음")
+	}
+	mainContent, _ := os.ReadFile("main.go")
+	if !strings.Contains(string(mainContent), "rootCmd.AddCommand(CreateCmd)") {
+		t.Errorf("main.go 자동 바인딩 누락: %q", string(mainContent))
+	}
+	// 인자 없이 실행하면 에러
+	if err := buildAddCmd().Execute(nil); err == nil {
+		t.Error("커맨드명 없이 실행 시 에러가 발생해야 함")
+	}
+}
+
+// TestBuildDoctorCmd doctor 커맨드의 Run이 에러 없이 동작하는지 검증한다.
+func TestBuildDoctorCmd(t *testing.T) {
+	_, cleanup := setupTmpDir(t)
+	defer cleanup()
+
+	os.WriteFile("main.go", []byte("package main\n// wcli:commands\n"), 0644)
+	os.WriteFile("go.mod", []byte("module myapp\nrequire github.com/seoyc/wcli v0.0.0\n"), 0644)
+
+	if err := buildDoctorCmd().Execute(nil); err != nil {
+		t.Fatalf("doctor 실행 실패: %v", err)
+	}
+}
+
 func TestRunDoctor_FailWithoutMainGo(t *testing.T) {
 	tmpDir, cleanup := setupTmpDir(t)
 	defer cleanup()
