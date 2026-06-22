@@ -6,8 +6,10 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
+	"time"
 )
 
 type configStore struct {
@@ -15,6 +17,8 @@ type configStore struct {
 	configPath string
 	configType string
 	data       map[string]any
+	autoEnv    bool
+	envPrefix  string
 }
 
 var globalConfig = &configStore{
@@ -50,6 +54,20 @@ func SetConfigType(inType string) {
 	globalConfig.configType = strings.ToLower(inType)
 }
 
+// SetEnvPrefix 환경변수 연동 시 사용할 글로벌 접두사를 설정합니다.
+func SetEnvPrefix(prefix string) {
+	globalConfig.mu.Lock()
+	defer globalConfig.mu.Unlock()
+	globalConfig.envPrefix = strings.ToUpper(prefix)
+}
+
+// AutomaticEnv 설정 키 조회 시 대응하는 환경변수가 존재하는 경우, 환경변수 값을 최우선으로 연동하도록 활성화합니다.
+func AutomaticEnv() {
+	globalConfig.mu.Lock()
+	defer globalConfig.mu.Unlock()
+	globalConfig.autoEnv = true
+}
+
 // ReadInConfig 설정 파일을 읽어 메모리에 로드합니다.
 func ReadInConfig() error {
 	globalConfig.mu.Lock()
@@ -64,50 +82,177 @@ func ReadInConfig() error {
 		return fmt.Errorf("read config file error: %w", err)
 	}
 
+	var parsed map[string]any
 	switch globalConfig.configType {
 	case "json":
-		var raw map[string]any
-		if err := json.Unmarshal(content, &raw); err != nil {
+		if err := json.Unmarshal(content, &parsed); err != nil {
 			return fmt.Errorf("parse json config error: %w", err)
 		}
-		globalConfig.data = raw
 	case "ini":
-		parsed, err := parseINIContent(string(content))
-		if err != nil {
-			return fmt.Errorf("parse ini config error: %w", err)
-		}
-		globalConfig.data = parsed
+		parsed, err = parseINIContent(string(content))
 	case "yaml", "yml":
-		parsed, err := parseYAMLContent(string(content))
-		if err != nil {
-			return fmt.Errorf("parse yaml config error: %w", err)
-		}
-		globalConfig.data = parsed
+		parsed, err = parseYAMLContent(string(content))
 	case "toml":
-		parsed, err := parseTOMLContent(string(content))
-		if err != nil {
-			return fmt.Errorf("parse toml config error: %w", err)
-		}
-		globalConfig.data = parsed
+		parsed, err = parseTOMLContent(string(content))
 	case "env":
-		parsed, err := parseDotEnvContent(string(content))
-		if err != nil {
-			return fmt.Errorf("parse env config error: %w", err)
-		}
-		globalConfig.data = parsed
+		parsed, err = parseDotEnvContent(string(content))
 	default:
 		return fmt.Errorf("unsupported config type: %q", globalConfig.configType)
 	}
 
+	if err != nil {
+		return err
+	}
+
+	globalConfig.data = NormalizeKeys(parsed).(map[string]any)
 	return nil
+}
+
+// ReloadConfig 이미 지정된 설정 파일 경로와 파일 형식 정보를 사용하여 설정을 디스크에서 다시 읽어옵니다.
+func ReloadConfig() error {
+	return ReadInConfig()
 }
 
 // Get 설정 맵에서 계층형 점 표기법(예: "database.port")으로 값을 획득합니다.
 func Get(key string) any {
 	globalConfig.mu.RLock()
 	defer globalConfig.mu.RUnlock()
+
+	if globalConfig.autoEnv {
+		envKey := strings.ReplaceAll(strings.ToUpper(key), ".", "_")
+		if globalConfig.envPrefix != "" {
+			envKey = globalConfig.envPrefix + "_" + envKey
+		}
+		if envVal, exists := os.LookupEnv(envKey); exists {
+			return envVal
+		}
+	}
+
 	return getNestedVal(globalConfig.data, key)
 }
+
+// GetString 설정 키 값을 string으로 획득하며, 존재하지 않거나 변환할 수 없으면 빈 문자열을 반환합니다.
+func GetString(key string) string {
+	val := Get(key)
+	if val == nil {
+		return ""
+	}
+	return fmt.Sprintf("%v", val)
+}
+
+// GetInt 설정 키 값을 int로 획득하며, 존재하지 않거나 변환할 수 없으면 0을 반환합니다.
+func GetInt(key string) int {
+	val := Get(key)
+	if val == nil {
+		return 0
+	}
+	switch v := val.(type) {
+	case int:
+		return v
+	case int64:
+		return int(v)
+	case float64:
+		return int(v)
+	case string:
+		if i, err := strconv.Atoi(v); err == nil {
+			return i
+		}
+	}
+	return 0
+}
+
+// GetBool 설정 키 값을 bool로 획득하며, 존재하지 않거나 변환할 수 없으면 false를 반환합니다.
+func GetBool(key string) bool {
+	val := Get(key)
+	if val == nil {
+		return false
+	}
+	switch v := val.(type) {
+	case bool:
+		return v
+	case string:
+		if b, err := strconv.ParseBool(v); err == nil {
+			return b
+		}
+	}
+	return false
+}
+
+// GetFloat64 설정 키 값을 float64로 획득하며, 존재하지 않거나 변환할 수 없으면 0.0을 반환합니다.
+func GetFloat64(key string) float64 {
+	val := Get(key)
+	if val == nil {
+		return 0.0
+	}
+	switch v := val.(type) {
+	case float64:
+		return v
+	case int:
+		return float64(v)
+	case int64:
+		return float64(v)
+	case string:
+		if f, err := strconv.ParseFloat(v, 64); err == nil {
+			return f
+		}
+	}
+	return 0.0
+}
+
+// GetDuration 설정 키 값을 time.Duration으로 획득하며, 존재하지 않거나 변환할 수 없으면 0을 반환합니다.
+func GetDuration(key string) time.Duration {
+	val := Get(key)
+	if val == nil {
+		return 0
+	}
+	switch v := val.(type) {
+	case time.Duration:
+		return v
+	case int:
+		return time.Duration(v)
+	case int64:
+		return time.Duration(v)
+	case float64:
+		return time.Duration(v)
+	case string:
+		if d, err := time.ParseDuration(v); err == nil {
+			return d
+		}
+	}
+	return 0
+}
+
+// GetStringSlice 설정 키 값을 []string으로 획득합니다.
+// 값이 슬라이스인 경우 string으로 변환해 반환하고,
+// 쉼표(,)로 구분된 단일 문자열인 경우 분리하여 반환합니다.
+func GetStringSlice(key string) []string {
+	val := Get(key)
+	if val == nil {
+		return nil
+	}
+	switch v := val.(type) {
+	case []string:
+		return v
+	case []any:
+		res := make([]string, len(v))
+		for i, item := range v {
+			res[i] = fmt.Sprintf("%v", item)
+		}
+		return res
+	case string:
+		parts := strings.Split(v, ",")
+		res := make([]string, 0, len(parts))
+		for _, part := range parts {
+			trimmed := strings.TrimSpace(part)
+			if trimmed != "" {
+				res = append(res, trimmed)
+			}
+		}
+		return res
+	}
+	return []string{fmt.Sprintf("%v", val)}
+}
+
 
 // Set 설정 맵에 계층형 점 표기법으로 값을 설정합니다.
 func Set(key string, value any) {
@@ -133,7 +278,7 @@ func getNestedVal(data map[string]any, key string) any {
 		if !ok {
 			return nil
 		}
-		val, exists := m[part]
+		val, exists := m[strings.ToLower(part)]
 		if !exists {
 			return nil
 		}
@@ -146,7 +291,7 @@ func setNestedMap(m map[string]any, key string, val any) {
 	parts := strings.Split(key, ".")
 	current := m
 	for i := 0; i < len(parts)-1; i++ {
-		part := parts[i]
+		part := strings.ToLower(parts[i])
 		next, exists := current[part]
 		if !exists {
 			nextMap := make(map[string]any)
@@ -163,7 +308,27 @@ func setNestedMap(m map[string]any, key string, val any) {
 			}
 		}
 	}
-	current[parts[len(parts)-1]] = val
+	current[strings.ToLower(parts[len(parts)-1])] = val
+}
+
+// NormalizeKeys 맵 데이터를 재귀적으로 돌며 모든 키를 소문자로 변환하여 정규화합니다.
+func NormalizeKeys(val any) any {
+	switch m := val.(type) {
+	case map[string]any:
+		res := make(map[string]any, len(m))
+		for k, v := range m {
+			res[strings.ToLower(k)] = NormalizeKeys(v)
+		}
+		return res
+	case []any:
+		res := make([]any, len(m))
+		for i, v := range m {
+			res[i] = NormalizeKeys(v)
+		}
+		return res
+	default:
+		return val
+	}
 }
 
 func parseINIContent(content string) (map[string]any, error) {

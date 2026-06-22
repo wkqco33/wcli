@@ -4,6 +4,7 @@ import (
 	"os"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/seoyc/wcli/config"
 )
@@ -260,5 +261,108 @@ func TestAutoDiscoverConfig_NotFound(t *testing.T) {
 	err := config.AutoDiscoverConfig("nonexistent_app_xyz123")
 	if err == nil {
 		t.Error("파일이 없을 때 에러 기대")
+	}
+}
+
+func TestTypedGetHelpers(t *testing.T) {
+	config.Set("test.str", "hello")
+	config.Set("test.int_str", "123")
+	config.Set("test.int_raw", 456)
+	config.Set("test.bool_str", "true")
+	config.Set("test.bool_raw", false)
+	config.Set("test.float_str", "1.23")
+	config.Set("test.duration_str", "5s")
+	config.Set("test.slice_str", "a, b, c")
+
+	if config.GetString("test.str") != "hello" {
+		t.Errorf("GetString 실패: %s", config.GetString("test.str"))
+	}
+	if config.GetInt("test.int_str") != 123 {
+		t.Errorf("GetInt(str) 실패: %d", config.GetInt("test.int_str"))
+	}
+	if config.GetInt("test.int_raw") != 456 {
+		t.Errorf("GetInt(raw) 실패: %d", config.GetInt("test.int_raw"))
+	}
+	if !config.GetBool("test.bool_str") {
+		t.Errorf("GetBool(str) 실패: %v", config.GetBool("test.bool_str"))
+	}
+	if config.GetBool("test.bool_raw") {
+		t.Errorf("GetBool(raw) 실패: %v", config.GetBool("test.bool_raw"))
+	}
+	if config.GetFloat64("test.float_str") != 1.23 {
+		t.Errorf("GetFloat64 실패: %f", config.GetFloat64("test.float_str"))
+	}
+	if config.GetDuration("test.duration_str") != 5*time.Second {
+		t.Errorf("GetDuration 실패: %v", config.GetDuration("test.duration_str"))
+	}
+	
+	slice := config.GetStringSlice("test.slice_str")
+	expectedSlice := []string{"a", "b", "c"}
+	if !reflect.DeepEqual(slice, expectedSlice) {
+		t.Errorf("GetStringSlice 실패: %v, 기대: %v", slice, expectedSlice)
+	}
+}
+
+func TestAutomaticEnv(t *testing.T) {
+	config.AutomaticEnv()
+	
+	// 1. 환경변수 미설정 시 기존 세팅값
+	config.Set("database.port", 3306)
+	if config.GetInt("database.port") != 3306 {
+		t.Errorf("기본 포트 반환 실패: %d", config.GetInt("database.port"))
+	}
+
+	// 2. 환경변수 설정 시 덮어쓰기 확인
+	os.Setenv("DATABASE_PORT", "5432")
+	defer os.Unsetenv("DATABASE_PORT")
+	if config.GetInt("database.port") != 5432 {
+		t.Errorf("환경변수 덮어쓰기 실패: %d", config.GetInt("database.port"))
+	}
+
+	// 3. 접두사(Prefix) 설정 시 동작 확인
+	config.SetEnvPrefix("MYAPP")
+	os.Setenv("MYAPP_DATABASE_PORT", "9999")
+	defer os.Unsetenv("MYAPP_DATABASE_PORT")
+
+	if config.GetInt("database.port") != 9999 {
+		t.Errorf("글로벌 접두사 적용된 환경변수 적용 실패: %d", config.GetInt("database.port"))
+	}
+}
+
+func TestReloadConfig(t *testing.T) {
+	tmpFile, err := os.CreateTemp("", "config-reload-*.json")
+	if err != nil {
+		t.Fatalf("임시 파일 생성 실패: %v", err)
+	}
+	defer os.Remove(tmpFile.Name())
+
+	// 1. 초기값 쓰기 및 로드
+	if _, err := tmpFile.Write([]byte(`{"key": "value1"}`)); err != nil {
+		t.Fatalf("임시 파일 쓰기 실패: %v", err)
+	}
+	tmpFile.Close()
+
+	config.SetConfigFile(tmpFile.Name())
+	config.SetConfigType("json")
+	if err := config.ReadInConfig(); err != nil {
+		t.Fatalf("ReadInConfig 실패: %v", err)
+	}
+
+	if config.GetString("key") != "value1" {
+		t.Errorf("초기값 로드 실패: %s", config.GetString("key"))
+	}
+
+	// 2. 파일 변경
+	if err := os.WriteFile(tmpFile.Name(), []byte(`{"key": "value2"}`), 0644); err != nil {
+		t.Fatalf("임시 파일 갱신 실패: %v", err)
+	}
+
+	// 3. 리로드
+	if err := config.ReloadConfig(); err != nil {
+		t.Fatalf("ReloadConfig 실패: %v", err)
+	}
+
+	if config.GetString("key") != "value2" {
+		t.Errorf("리로드 후 변경값 로드 실패: %s", config.GetString("key"))
 	}
 }

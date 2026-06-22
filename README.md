@@ -326,10 +326,42 @@ rich.Println("[bold][red]텍스트[/bold][/red]")  // 정상 동작
 ```go
 s := rich.NewSpinner(os.Stderr) // nil이면 os.Stderr 사용
 
+// 다양한 스타일 지정 가능 (기본값: SpinnerDefault)
+// 지원 프리셋: SpinnerDefault, SpinnerDots, SpinnerLine, SpinnerCircle, SpinnerArrow, SpinnerBouncing
+s.SetStyle(rich.SpinnerDots)
+
 s.Start("데이터 로딩 중...")
 // ... 비동기 작업 ...
 s.UpdateText("거의 완료...")     // 실행 중 텍스트 변경 (thread-safe)
 s.Stop("[green]✓ 완료[/green]") // 멈추고 완료 메시지 출력
+```
+
+## ProgressBar
+
+진행 상황을 진행 표시줄(Progress Bar)로 렌더링합니다. 다양한 빌트인 테마, 마크업 색상, 카운터 및 예상 완료 시간(ETA) 표시 옵션을 지원합니다.
+
+```go
+pb := rich.NewProgressBar(100) // 전체 단계 100 지정
+
+// 1. 다양한 스타일 테마 지원 (기본값: ThemeBlock)
+// 지원 프리셋: ThemeBlock(█/░), ThemeLine(━/─), ThemeDoubleLine(═/─), ThemeBullet(●/○), ThemeArrow(>/ ), ThemeStar(★/☆)
+pb.SetTheme(rich.ThemeDoubleLine)
+
+// 2. 색상 마크업 지정
+pb.FillColor = "blue"
+pb.EmptyColor = "dim"
+
+// 3. 다양한 옵션 지원
+pb.ShowCounter = true // "(30/100)" 카운터 표시 활성화
+pb.ShowETA = true     // "ETA: 5s" 예상 남은 시간 표시 활성화
+
+// 4. 타이머 시작 (ETA 계산에 필요)
+pb.Start()
+
+for i := 0; i <= 100; i += 20 {
+    pb.Print(i) // os.Stdout에 렌더링 결과 출력
+    time.Sleep(100 * time.Millisecond)
+}
 ```
 
 ## Interactive Prompts
@@ -481,13 +513,21 @@ _ = cmd.Flags().BindEnv("host", "DB_HOST")
 _ = cmd.Flags().BindConfig("host", "database.host")  // 점 표기법으로 중첩 키 접근
 ```
 
-또는 직접 값 조회:
+또는 직접 값 조회 (타입 안전한 Get 헬퍼 포함):
 
 ```go
 config.SetConfigFile("config.json")
 _ = config.ReadInConfig()
 
-host := config.Get("database.host")  // 점 표기법 지원
+// 1. 일반 점 표기법 조회
+host := config.Get("database.host")
+
+// 2. 타입 안전한 헬퍼 (자동 타입 캐스팅 지원)
+port := config.GetInt("database.port")
+debug := config.GetBool("app.debug")
+ips := config.GetStringSlice("database.allowed_ips")
+timeout := config.GetDuration("app.timeout") // time.Duration 반환
+
 config.Set("app.debug", true)        // 런타임에 값 설정
 config.SetDefault("app.port", 8080)  // 키가 없을 때만 설정
 ```
@@ -514,6 +554,22 @@ if err := config.AutoDiscoverConfig("myapp", "/opt/myapp/config.yaml"); err != n
 }
 ```
 
+### 환경변수 글로벌 연동 및 리로드 (Env & Reload)
+
+* **환경변수 글로벌 연동 (`AutomaticEnv`)**: 활성화 시 `config.Get`을 통한 설정 조회 시 환경변수(예: `DATABASE_PORT`)가 존재하면 파일 내 설정 값보다 환경변수 값을 최우선으로 연동하여 반환합니다. 대소문자는 구분하지 않습니다.
+* **설정 리로드 (`ReloadConfig`)**: 서버나 장기 실행 CLI 프로세스 등에서 설정 파일이 동적으로 변경되었을 때 메모리에 이미 로드된 설정을 디스크에서 다시 로드합니다.
+
+```go
+// 글로벌 환경변수 최우선 연동 활성화
+config.AutomaticEnv()
+config.SetEnvPrefix("APP") // 환경변수 접두사 설정 (APP_DATABASE_PORT 형태 연동)
+
+// 디스크에서 설정 실시간 리로드
+if err := config.ReloadConfig(); err != nil {
+    log.Printf("설정 리로드 실패: %v", err)
+}
+```
+
 ### 구조체 바인딩 (Load)
 
 설정 파일, `.env`, 환경변수 값을 구조체에 직접 바인딩합니다.
@@ -522,9 +578,10 @@ if err := config.AutoDiscoverConfig("myapp", "/opt/myapp/config.yaml"); err != n
 import "github.com/seoyc/wcli/config"
 
 type AppConfig struct {
-    Host    string `wcli:"HOST" default:"localhost"`
-    Port    int    `wcli:"PORT" default:"8080"`
-    Debug   bool   `wcli:"DEBUG"`
+    Host    string   `wcli:"HOST" default:"localhost"`
+    Port    int      `wcli:"PORT" default:"8080"`
+    Debug   bool     `wcli:"DEBUG"`
+    IPs     []string `wcli:"IPS"` // 슬라이스 바인딩 지원 ([]string, []int 등)
     DB struct {
         User string `wcli:"USER"`
         Pass string `wcli:"PASS"`
@@ -534,7 +591,7 @@ type AppConfig struct {
 var cfg AppConfig
 err := config.Load(&cfg,
     config.WithDotEnv(".env"),          // .env 파일
-    config.WithFiles("config.yaml"),    // YAML 또는 TOML 파일
+    config.WithFiles("config.yaml"),    // YAML 또는 TOML 파일 (대소문자 구분 없이 자동 매칭 지원)
     config.WithEnv(),                   // 시스템 환경변수 (최우선)
     config.WithPrefix("APP"),           // 환경변수 접두사
 )

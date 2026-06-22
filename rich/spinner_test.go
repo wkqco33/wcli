@@ -55,3 +55,39 @@ func TestSpinner_StartAlreadyRunning(t *testing.T) {
 	s.Start("두 번째") // 중복 Start
 	s.Stop("")
 }
+
+func TestSpinner_StylesAndPreset(t *testing.T) {
+	// 다양한 빌트인 스타일 설정 시 문제 없이 동작하는지 테스트
+	styles := []rich.SpinnerStyle{
+		rich.SpinnerDefault,
+		rich.SpinnerDots,
+		rich.SpinnerLine,
+		rich.SpinnerCircle,
+		rich.SpinnerArrow,
+		rich.SpinnerBouncing,
+	}
+
+	for _, style := range styles {
+		var buf bytes.Buffer
+		s := rich.NewSpinner(&buf)
+		s.SetStyle(style)
+		s.Start("로딩")
+		time.Sleep(5 * time.Millisecond)
+		s.Stop("완료")
+	}
+}
+
+func TestSpinner_CustomStyle(t *testing.T) {
+	// 커스텀 스타일 테스트
+	customStyle := rich.SpinnerStyle{
+		Frames:   []string{"A", "B", "C"},
+		Interval: 2 * time.Millisecond,
+	}
+
+	var buf bytes.Buffer
+	s := rich.NewSpinner(&buf)
+	s.SetStyle(customStyle)
+	s.Start("동작")
+	time.Sleep(10 * time.Millisecond)
+	s.Stop("")
+}
