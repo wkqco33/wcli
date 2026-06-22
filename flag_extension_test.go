@@ -138,6 +138,60 @@ func TestFlagRequiredTogether(t *testing.T) {
 	}
 }
 
+// TestExclusiveViaExecute 그룹 제약이 Execute() 경로(combined FlagSet)에서도
+// 동작하는지 검증한다. merge()가 그룹 정보를 복사하지 않으면 제약이 무력화된다.
+func TestExclusiveViaExecute(t *testing.T) {
+	var jsonOut, yamlOut bool
+	cmd := &wcli.Command{
+		Use:           "app",
+		SilenceErrors: true,
+		Run:           func(ctx *wcli.Context) error { return nil },
+	}
+	cmd.Flags().BoolVar(&jsonOut, "json", "j", false, "JSON output")
+	cmd.Flags().BoolVar(&yamlOut, "yaml", "y", false, "YAML output")
+	cmd.Flags().MarkFlagsMutuallyExclusive("json", "yaml")
+
+	// 하나만 설정 -> 정상
+	if err := cmd.Execute([]string{"--json"}); err != nil {
+		t.Errorf("단일 플래그는 통과해야 함: %v", err)
+	}
+	// 둘 다 설정 -> 상호 배제 에러
+	err := cmd.Execute([]string{"--json", "--yaml"})
+	if err == nil {
+		t.Fatal("상호 배제 검증 에러가 발생해야 함")
+	}
+	if !strings.Contains(err.Error(), "mutually exclusive") {
+		t.Errorf("에러 메시지에 'mutually exclusive' 포함 기대, 실제: %v", err)
+	}
+}
+
+// TestRequiredTogetherViaPersistent persistent 플래그에 건 동반 제약이
+// 하위 커맨드 Execute 경로에서도 동작하는지 검증한다.
+func TestRequiredTogetherViaPersistent(t *testing.T) {
+	var user, password string
+	root := &wcli.Command{Use: "app"}
+	root.PersistentFlags().StringVar(&user, "user", "u", "", "Username")
+	root.PersistentFlags().StringVar(&password, "password", "p", "", "Password")
+	root.PersistentFlags().MarkFlagsRequiredTogether("user", "password")
+
+	sub := &wcli.Command{
+		Use:           "run",
+		SilenceErrors: true,
+		Run:           func(ctx *wcli.Context) error { return nil },
+	}
+	root.AddCommand(sub)
+
+	// 하나만 설정 -> 에러
+	err := root.Execute([]string{"run", "--user", "alice"})
+	if err == nil {
+		t.Fatal("동반 지정 제약으로 검증 에러가 발생해야 함")
+	}
+	// 둘 다 설정 -> 정상
+	if err := root.Execute([]string{"run", "--user", "alice", "--password", "secret"}); err != nil {
+		t.Errorf("둘 다 설정 시 통과해야 함: %v", err)
+	}
+}
+
 func TestFlagPriorityChain(t *testing.T) {
 	// 임시 JSON 설정 파일 준비
 	jsonContent := `{"server": {"host": "config-host"}}`
