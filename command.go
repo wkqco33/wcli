@@ -158,11 +158,20 @@ func (c *Command) AddCommand(cmds ...*Command) {
 	}
 }
 
-// Execute 인자를 받아 플래그를 파싱하고 명령어를 실행
+// Execute 인자를 받아 플래그를 파싱하고 명령어를 실행 (context.Background() 사용)
 func (c *Command) Execute(args []string) error {
+	return c.ExecuteContext(context.Background(), args)
+}
+
+// ExecuteContext 외부 context.Context를 주입하여 명령어를 실행합니다.
+// 주입된 컨텍스트는 Context.Context로 전달되어 Run/훅에서 취소·타임아웃·값 전파에 사용할 수 있습니다.
+func (c *Command) ExecuteContext(parent context.Context, args []string) error {
+	if parent == nil {
+		parent = context.Background()
+	}
 	logger := c.getLogger()
 	ctx := &Context{
-		Context: context.Background(),
+		Context: parent,
 		Args:    args,
 		Logger:  logger,
 	}
@@ -375,18 +384,24 @@ func (c *Command) matchesName(name string) bool {
 }
 
 // isVersionRequested args에서 --version 플래그를 감지합니다.
+// 비-bool 플래그의 값으로 사용된 경우는 무시합니다.
 func (c *Command) isVersionRequested(args []string) bool {
-	for _, arg := range args {
-		if arg == "--version" {
-			return true
-		}
-	}
-	return false
+	return c.scanForFlag(args, func(arg string) bool {
+		return arg == "--version"
+	})
 }
 
 // isHelpRequested args에서 -h/--help 플래그를 감지합니다.
 // 비-bool 플래그의 값으로 사용된 경우는 무시합니다.
 func (c *Command) isHelpRequested(args []string) bool {
+	return c.scanForFlag(args, func(arg string) bool {
+		return arg == "-h" || arg == "--help"
+	})
+}
+
+// scanForFlag args를 순회하며 match가 true를 반환하는 인자가 있는지 확인합니다.
+// `--` 종결자 이후는 무시하고, 비-bool 플래그의 값으로 소비되는 토큰도 건너뜁니다.
+func (c *Command) scanForFlag(args []string, match func(arg string) bool) bool {
 	combined := c.buildCombinedFlagSet()
 	skipNext := false
 	for _, arg := range args {
@@ -397,7 +412,7 @@ func (c *Command) isHelpRequested(args []string) bool {
 		if arg == "--" {
 			return false
 		}
-		if arg == "-h" || arg == "--help" {
+		if match(arg) {
 			return true
 		}
 		if strings.HasPrefix(arg, "--") && !strings.Contains(arg, "=") {

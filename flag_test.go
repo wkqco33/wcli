@@ -104,6 +104,73 @@ func TestFlagDoubleDashTerminator(t *testing.T) {
 	}
 }
 
+// TestShortFlagCluster 결합 단축 플래그(-vh, -ab, -ofile, -vo file)를 검증한다.
+func TestShortFlagCluster(t *testing.T) {
+	t.Run("bool 묶음", func(t *testing.T) {
+		var a, b, c bool
+		cmd := &wcli.Command{Use: "app", Run: func(ctx *wcli.Context) error { return nil }}
+		cmd.Flags().BoolVar(&a, "all", "a", false, "")
+		cmd.Flags().BoolVar(&b, "bose", "b", false, "")
+		cmd.Flags().BoolVar(&c, "cat", "c", false, "")
+		if err := cmd.Execute([]string{"-ab"}); err != nil {
+			t.Fatalf("실행 실패: %v", err)
+		}
+		if !a || !b || c {
+			t.Errorf("기대 a=true b=true c=false, 실제 a=%v b=%v c=%v", a, b, c)
+		}
+	})
+
+	t.Run("bool 후 값 플래그 (붙은 값)", func(t *testing.T) {
+		var v bool
+		var out string
+		cmd := &wcli.Command{Use: "app", Run: func(ctx *wcli.Context) error { return nil }}
+		cmd.Flags().BoolVar(&v, "verbose", "v", false, "")
+		cmd.Flags().StringVar(&out, "out", "o", "", "")
+		if err := cmd.Execute([]string{"-vofile.txt"}); err != nil {
+			t.Fatalf("실행 실패: %v", err)
+		}
+		if !v || out != "file.txt" {
+			t.Errorf("기대 v=true out=file.txt, 실제 v=%v out=%q", v, out)
+		}
+	})
+
+	t.Run("bool 후 값 플래그 (다음 인자)", func(t *testing.T) {
+		var v bool
+		var out string
+		cmd := &wcli.Command{Use: "app", Run: func(ctx *wcli.Context) error { return nil }}
+		cmd.Flags().BoolVar(&v, "verbose", "v", false, "")
+		cmd.Flags().StringVar(&out, "out", "o", "", "")
+		if err := cmd.Execute([]string{"-vo", "file.txt"}); err != nil {
+			t.Fatalf("실행 실패: %v", err)
+		}
+		if !v || out != "file.txt" {
+			t.Errorf("기대 v=true out=file.txt, 실제 v=%v out=%q", v, out)
+		}
+	})
+
+	t.Run("미등록 문자는 에러", func(t *testing.T) {
+		var a bool
+		cmd := &wcli.Command{Use: "app", SilenceErrors: true, Run: func(ctx *wcli.Context) error { return nil }}
+		cmd.Flags().BoolVar(&a, "all", "a", false, "")
+		if err := cmd.Execute([]string{"-ax"}); err == nil {
+			t.Error("미등록 단축키 -x로 에러가 발생해야 함")
+		}
+	})
+
+	t.Run("다중 문자 단축키 우선", func(t *testing.T) {
+		// "ab"가 단일 단축키로 등록된 경우 결합으로 분해하지 않아야 함
+		var v bool
+		cmd := &wcli.Command{Use: "app", Run: func(ctx *wcli.Context) error { return nil }}
+		cmd.Flags().BoolVar(&v, "verbose", "ab", false, "")
+		if err := cmd.Execute([]string{"-ab"}); err != nil {
+			t.Fatalf("실행 실패: %v", err)
+		}
+		if !v {
+			t.Error("다중 문자 단축키 -ab가 단일로 처리되어야 함")
+		}
+	})
+}
+
 func TestHelpFlagValueNotMisdetected(t *testing.T) {
 	var configVal string
 	cmd := &wcli.Command{

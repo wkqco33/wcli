@@ -2,6 +2,7 @@ package wcli_test
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"reflect"
@@ -251,6 +252,100 @@ func TestVersionFlag(t *testing.T) {
 	}
 	if !strings.Contains(buf.String(), "1.2.3") {
 		t.Errorf("버전 출력에 '1.2.3'이 없음: %q", buf.String())
+	}
+}
+
+// TestVersionNotTriggeredAsFlagValue --version이 비-bool 플래그의 값으로 전달된 경우
+// 버전 출력으로 오인하지 않아야 한다.
+func TestVersionNotTriggeredAsFlagValue(t *testing.T) {
+	var buf strings.Builder
+	var name string
+	var ran bool
+	cmd := &wcli.Command{
+		Use:       "myapp",
+		Version:   "1.2.3",
+		OutWriter: &buf,
+		Run:       func(ctx *wcli.Context) error { ran = true; return nil },
+	}
+	cmd.Flags().StringVar(&name, "name", "n", "", "이름")
+
+	if err := cmd.Execute([]string{"--name", "--version"}); err != nil {
+		t.Fatalf("실행 실패: %v", err)
+	}
+	if !ran {
+		t.Error("Run이 실행되어야 함 (--version은 --name의 값)")
+	}
+	if name != "--version" {
+		t.Errorf("--name 값이 '--version'이어야 함, 실제: %q", name)
+	}
+	if strings.Contains(buf.String(), "1.2.3") {
+		t.Errorf("버전이 출력되면 안 됨: %q", buf.String())
+	}
+}
+
+// TestDuplicateFlagPanics 같은 이름/단축키를 두 번 등록하면 panic해야 한다.
+func TestDuplicateFlagPanics(t *testing.T) {
+	t.Run("같은 이름", func(t *testing.T) {
+		defer func() {
+			if recover() == nil {
+				t.Error("중복 이름 등록 시 panic해야 함")
+			}
+		}()
+		var a, b string
+		fs := wcli.NewFlagSet()
+		fs.StringVar(&a, "out", "o", "", "")
+		fs.StringVar(&b, "out", "", "", "")
+	})
+	t.Run("같은 단축키", func(t *testing.T) {
+		defer func() {
+			if recover() == nil {
+				t.Error("중복 단축키 등록 시 panic해야 함")
+			}
+		}()
+		var a, b string
+		fs := wcli.NewFlagSet()
+		fs.StringVar(&a, "out", "o", "", "")
+		fs.StringVar(&b, "output", "o", "", "")
+	})
+}
+
+// TestExecuteContext 주입한 컨텍스트가 Run에 전달되고 값/취소가 전파되는지 검증한다.
+func TestExecuteContext(t *testing.T) {
+	type ctxKey string
+	const key ctxKey = "trace"
+
+	// 1. 값 전파
+	cmd := &wcli.Command{
+		Use: "app",
+		Run: func(ctx *wcli.Context) error {
+			if v := ctx.Value(key); v != "abc" {
+				t.Errorf("컨텍스트 값 전파 실패, 기대 'abc' 실제 %v", v)
+			}
+			return nil
+		},
+	}
+	parent := context.WithValue(context.Background(), key, "abc")
+	if err := cmd.ExecuteContext(parent, nil); err != nil {
+		t.Fatalf("실행 실패: %v", err)
+	}
+
+	// 2. 취소 전파
+	cancelCmd := &wcli.Command{
+		Use: "app",
+		Run: func(ctx *wcli.Context) error {
+			return ctx.Err()
+		},
+	}
+	cctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := cancelCmd.ExecuteContext(cctx, nil); err != context.Canceled {
+		t.Errorf("취소 전파 실패, 기대 context.Canceled 실제 %v", err)
+	}
+
+	// 3. nil 컨텍스트는 Background로 대체되어 패닉하지 않음
+	nilCmd := &wcli.Command{Use: "app", Run: func(ctx *wcli.Context) error { return nil }}
+	if err := nilCmd.ExecuteContext(nil, nil); err != nil {
+		t.Errorf("nil 컨텍스트 실행 실패: %v", err)
 	}
 }
 

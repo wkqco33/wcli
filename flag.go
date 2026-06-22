@@ -63,8 +63,16 @@ func NewFlagSet() *FlagSet {
 	}
 }
 
-// addFlag 플래그를 세트에 등록
+// addFlag 플래그를 세트에 등록. 같은 이름/단축키가 이미 등록돼 있으면 panic합니다(개발 단계 실수 방지).
 func (f *FlagSet) addFlag(flag *Flag) {
+	if _, exists := f.flags[flag.Name]; exists {
+		panic(fmt.Sprintf("wcli: flag --%s redefined", flag.Name))
+	}
+	if flag.Shorthand != "" {
+		if existing, exists := f.shorts[flag.Shorthand]; exists {
+			panic(fmt.Sprintf("wcli: shorthand -%s redefined (flags --%s and --%s)", flag.Shorthand, existing.Name, flag.Name))
+		}
+	}
 	f.flags[flag.Name] = flag
 	if flag.Shorthand != "" {
 		f.shorts[flag.Shorthand] = flag
@@ -354,22 +362,24 @@ func (f *FlagSet) Parse(args []string) ([]string, error) {
 			}
 		} else if strings.HasPrefix(arg, "-") && len(arg) > 1 {
 			short := arg[1:]
-			var inlineVal string
-			hasInline := false
+			// -o=value 형태의 인라인 값
 			if eqIdx := strings.IndexByte(short, '='); eqIdx >= 0 {
-				inlineVal = short[eqIdx+1:]
-				short = short[:eqIdx]
-				hasInline = true
+				name := short[:eqIdx]
+				flag, ok := f.shorts[name]
+				if !ok {
+					return nil, &FlagError{FlagName: name, Err: fmt.Errorf("unknown flag: -%s", name)}
+				}
+				if err := f.setFlagValue(flag, short[eqIdx+1:], arg); err != nil {
+					return nil, err
+				}
+				continue
 			}
-			flag, ok := f.shorts[short]
-			if !ok {
-				return nil, &FlagError{FlagName: short, Err: fmt.Errorf("unknown flag: -%s", short)}
-			}
+			// 등록된 단축키면 단일 처리(다중 문자 단축키 호환), 아니면 결합 단축 플래그(-vh)로 파싱
 			var err error
-			if hasInline {
-				err = f.setFlagValue(flag, inlineVal, arg)
-			} else {
+			if flag, ok := f.shorts[short]; ok {
 				i, err = f.parseValue(i, args, flag)
+			} else {
+				i, err = f.parseShortCluster(i, args, short)
 			}
 			if err != nil {
 				return nil, err
@@ -397,6 +407,32 @@ func (f *FlagSet) parseValue(idx int, args []string, flag *Flag) (int, error) {
 		return idx, err
 	}
 	return idx + 1, nil
+}
+
+// parseShortCluster 결합 단축 플래그(-vh, -vofile 등)를 파싱합니다.
+// 각 문자를 bool 플래그로 처리하다가 비-bool 플래그를 만나면 나머지 문자열(또는 다음 인자)을 값으로 사용하고 종료합니다.
+func (f *FlagSet) parseShortCluster(idx int, args []string, cluster string) (int, error) {
+	for k := 0; k < len(cluster); k++ {
+		ch := cluster[k : k+1]
+		flag, ok := f.shorts[ch]
+		if !ok {
+			return idx, &FlagError{FlagName: ch, Err: fmt.Errorf("unknown flag: -%s", ch)}
+		}
+		if flag.Type == TypeBool {
+			*flag.valueBool = true
+			flag.wasSet = true
+			continue
+		}
+		// 비-bool 플래그: 뒤에 남은 문자가 있으면 값으로(-ofile), 없으면 다음 인자를 값으로(-o file)
+		if rest := cluster[k+1:]; rest != "" {
+			return idx, f.setFlagValue(flag, rest, "-"+ch)
+		}
+		if idx+1 >= len(args) {
+			return idx, &FlagError{FlagName: flag.Name, Err: fmt.Errorf("flag '-%s' requires a value", ch)}
+		}
+		return idx + 1, f.setFlagValue(flag, args[idx+1], "-"+ch)
+	}
+	return idx, nil
 }
 
 func (f *FlagSet) setFlagValue(flag *Flag, val string, flagArg string) error {
