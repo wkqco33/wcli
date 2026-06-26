@@ -51,6 +51,21 @@ func TestBox_Render(t *testing.T) {
 		}
 	})
 
+	t.Run("전각 문자 정렬", func(t *testing.T) {
+		// 한글/이모지가 섞여 줄마다 글자 수가 달라도 모든 줄의 표시 폭이
+		// 같아야 테두리가 맞는다(전각=2칸 반영).
+		var buf strings.Builder
+		rich.NewBox("포맷  GIF\n프레임  10  (Ctrl+C로 종료)").
+			WithTitle("🎬 t.gif").Render(&buf)
+		lines := strings.Split(strings.TrimRight(buf.String(), "\n"), "\n")
+		want := rich.DisplayWidth(lines[0])
+		for i, l := range lines {
+			if w := rich.DisplayWidth(l); w != want {
+				t.Errorf("줄 %d 표시폭=%d, 기대=%d (%q)", i, w, want, l)
+			}
+		}
+	})
+
 	t.Run("메서드 체이닝", func(t *testing.T) {
 		var buf strings.Builder
 		b := rich.NewBox("content").WithTitle("title")

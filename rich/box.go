@@ -4,7 +4,6 @@ import (
 	"io"
 	"os"
 	"strings"
-	"unicode/utf8"
 )
 
 // Box 텍스트를 유니코드 테두리 박스로 감싸 출력하는 구조체입니다.
@@ -30,10 +29,10 @@ func (b *Box) WithTitle(title string) *Box {
 func (b *Box) Render(w io.Writer) {
 	lines := strings.Split(b.Content, "\n")
 
-	// 최대 시각 너비 계산 (마크업 태그 제외)
-	maxWidth := utf8.RuneCountInString(b.Title)
+	// 최대 시각 너비 계산 (마크업 태그 제외, 전각 문자는 2칸)
+	maxWidth := DisplayWidth(stripMarkup(b.Title))
 	for _, line := range lines {
-		if n := utf8.RuneCountInString(stripMarkup(line)); n > maxWidth {
+		if n := DisplayWidth(stripMarkup(line)); n > maxWidth {
 			maxWidth = n
 		}
 	}
@@ -44,7 +43,7 @@ func (b *Box) Render(w io.Writer) {
 	// 상단 테두리
 	if b.Title != "" {
 		titleStr := " " + b.Title + " "
-		titleLen := utf8.RuneCountInString(titleStr)
+		titleLen := DisplayWidth(stripMarkup(titleStr))
 		if titleLen > inner {
 			inner = titleLen
 			maxWidth = inner - 2
@@ -60,7 +59,7 @@ func (b *Box) Render(w io.Writer) {
 	// 내용 줄 (내용 자체의 마크업도 그대로 파싱됨)
 	for _, line := range lines {
 		stripped := stripMarkup(line) // maxWidth 계산에서 이미 호출됐으므로 재계산 방지
-		visualLen := utf8.RuneCountInString(stripped)
+		visualLen := DisplayWidth(stripped)
 		padding := strings.Repeat(" ", maxWidth-visualLen)
 		Fprintln(w, "[bold]│[/bold] %s%s [bold]│[/bold]", line, padding)
 	}

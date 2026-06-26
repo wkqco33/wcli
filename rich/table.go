@@ -5,7 +5,6 @@ import (
 	"io"
 	"os"
 	"strings"
-	"unicode/utf8"
 )
 
 // Table 텍스트 기반 테이블을 출력하는 구조체입니다.
@@ -34,10 +33,10 @@ func (t *Table) Render(w io.Writer) {
 		return
 	}
 
-	// 각 열의 표시 너비(유니코드 문자 수) 계산
+	// 각 열의 표시 너비(전각 문자는 2칸) 계산
 	widths := make([]int, cols)
 	for i, h := range t.headers {
-		widths[i] = utf8.RuneCountInString(h)
+		widths[i] = DisplayWidth(h)
 	}
 	for _, row := range t.rows {
 		for i := 0; i < cols; i++ {
@@ -45,7 +44,7 @@ func (t *Table) Render(w io.Writer) {
 			if i < len(row) {
 				val = row[i]
 			}
-			if n := utf8.RuneCountInString(val); n > widths[i] {
+			if n := DisplayWidth(val); n > widths[i] {
 				widths[i] = n
 			}
 		}
@@ -90,7 +89,7 @@ func tableRow(row []string, widths []int, cols int) string {
 		if i < len(row) {
 			val = row[i]
 		}
-		runeLen := utf8.RuneCountInString(val)
+		runeLen := DisplayWidth(val)
 		padding := widths[i] - runeLen
 		b.WriteString(fmt.Sprintf(" %s%s |", val, strings.Repeat(" ", padding)))
 	}
