@@ -14,3 +14,9 @@
   - 진행률 기준 남은 예상 완료 시간을 추정하는 ETA(`ShowETA`, `Start()`) 기능 추가.
 - **시연용 데모 예제 추가**
   - `examples/rich_demo/main.go`를 신설하여 새로운 스피너 및 프로그레스바 테마 전체 시연 가능하도록 구성.
+- **전각 문자 표시 폭 계산 유틸 추가**
+  - `DisplayWidth(s string) int`를 추가하여 한글/한자/가나/전각기호 및 주요 이모지를 2칸으로 계산.
+
+### 수정 (Fixed)
+- **Box/Table 정렬 오류 수정**
+  - `Box`, `Table`이 폭을 룬 개수(`utf8.RuneCountInString`)로 계산해 한글/이모지 등 전각 문자가 섞이면 오른쪽 테두리가 어긋나던 문제를 `DisplayWidth` 적용으로 해결.
