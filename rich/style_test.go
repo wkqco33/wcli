@@ -1,6 +1,7 @@
 package rich_test
 
 import (
+	"bytes"
 	"strings"
 	"testing"
 
@@ -82,6 +83,61 @@ func TestMarkup(t *testing.T) {
 				t.Errorf("Markup() = %q, want to contain %q", got, tt.expected)
 			}
 		})
+	}
+}
+
+// TestFprintln_NonTagBracketsPreserved 비-터미널(색상 미지원) 출력 경로에서
+// tagMap에 없는 대괄호 텍스트가 삭제되지 않고 그대로 보존되는지 확인합니다.
+// bytes.Buffer는 터미널이 아니므로 Fprintln이 내부적으로 stripMarkup을 사용합니다.
+func TestFprintln_NonTagBracketsPreserved(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{
+			name:  "알 수 없는 여는 태그는 리터럴로 보존",
+			input: "허용값: [TODO] 또는 [WIP]",
+			want:  "허용값: [TODO] 또는 [WIP]",
+		},
+		{
+			name:  "쉼표가 섞인 목록형 대괄호는 태그가 아니므로 보존",
+			input: "다음 중 하나: [red, green, blue]",
+			want:  "다음 중 하나: [red, green, blue]",
+		},
+		{
+			name:  "실제 알려진 태그는 여전히 제거됨",
+			input: "[bold]강조[/bold] 일반",
+			want:  "강조 일반",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			rich.Fprintln(&buf, "%s", tt.input)
+			got := strings.TrimRight(buf.String(), "\n")
+			if got != tt.want {
+				t.Errorf("Fprintln output = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestEscapeMarkup(t *testing.T) {
+	// 이스케이프하지 않으면 "[red]"처럼 실제 태그명과 우연히 일치하는 리터럴
+	// 텍스트가 Markup()에 의해 ANSI 코드로 둔갑해 원래 글자가 사라진다.
+	dynamic := "허용값: [red] 또는 [blue]"
+	unescaped := rich.Markup(dynamic)
+	if strings.Contains(unescaped, "red") || strings.Contains(unescaped, "blue") {
+		t.Fatalf("전제 조건 실패: 이스케이프 없이도 리터럴이 보존됨(테스트 가정과 다름): %q", unescaped)
+	}
+
+	// EscapeMarkup을 적용하면 대괄호가 리터럴로 보존되어야 한다.
+	escaped := rich.EscapeMarkup(dynamic)
+	got := rich.Markup(escaped)
+	if got != dynamic {
+		t.Errorf("Markup(EscapeMarkup(s)) = %q, want %q", got, dynamic)
 	}
 }
 

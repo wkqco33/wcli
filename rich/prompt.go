@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"reflect"
 	"strconv"
 	"strings"
+	"sync"
 )
 
 // Prompt 레이블을 출력하고 os.Stdin에서 한 줄 입력을 받습니다.
@@ -35,7 +37,7 @@ func FPrompt(out io.Writer, in io.Reader, label, defaultVal string) (string, err
 		Fprint(out, "%s: ", label)
 	}
 
-	line, err := readLine(in)
+	line, err := readLine(getLineReader(in))
 	if err != nil {
 		return "", err
 	}
@@ -53,7 +55,7 @@ func FConfirm(out io.Writer, in io.Reader, label string, defaultVal bool) (bool,
 	}
 	Fprint(out, "%s %s: ", label, hint)
 
-	line, err := readLine(in)
+	line, err := readLine(getLineReader(in))
 	if err != nil {
 		return false, err
 	}
@@ -65,7 +67,7 @@ func FConfirm(out io.Writer, in io.Reader, label string, defaultVal bool) (bool,
 	case "":
 		return defaultVal, nil
 	default:
-		return false, fmt.Errorf("올바른 값을 입력하세요 (y/n)")
+		return false, fmt.Errorf("invalid value, expected y or n")
 	}
 }
 
@@ -73,7 +75,7 @@ func FConfirm(out io.Writer, in io.Reader, label string, defaultVal bool) (bool,
 // 잘못된 입력 시 최대 3회 재시도합니다.
 func FSelect(out io.Writer, in io.Reader, label string, choices []string) (string, error) {
 	if len(choices) == 0 {
-		return "", fmt.Errorf("선택지가 없습니다")
+		return "", fmt.Errorf("no choices provided")
 	}
 
 	Fprintln(out, "[bold]%s[/bold]", label)
@@ -81,10 +83,12 @@ func FSelect(out io.Writer, in io.Reader, label string, choices []string) (strin
 		Fprintln(out, "  [cyan]%d[/cyan]. %s", i+1, c)
 	}
 
+	reader := getLineReader(in)
+
 	const maxRetry = 3
 	for attempt := 0; attempt < maxRetry; attempt++ {
 		Fprint(out, "번호 선택 (1-%d): ", len(choices))
-		line, err := readLine(in)
+		line, err := readLine(reader)
 		if err != nil {
 			return "", err
 		}
@@ -95,13 +99,41 @@ func FSelect(out io.Writer, in io.Reader, label string, choices []string) (strin
 		}
 		return choices[n-1], nil
 	}
-	return "", fmt.Errorf("유효한 선택을 %d회 안에 입력하지 않았습니다", maxRetry)
+	return "", fmt.Errorf("no valid selection made within %d attempts", maxRetry)
 }
 
-// readLine in에서 한 줄을 읽어 공백을 제거한 후 반환합니다.
-func readLine(in io.Reader) (string, error) {
-	reader := bufio.NewReader(in)
-	line, err := reader.ReadString('\n')
+// lineReaderCache in(io.Reader)별로 재사용할 *bufio.Reader를 보관합니다.
+// bufio.Reader는 내부적으로 미리 읽어들인(read-ahead) 바이트를 버퍼에 보관하므로,
+// 같은 in에 대해 호출할 때마다 새 bufio.Reader를 만들면 이전에 미리 읽혀 버퍼에
+// 남아있던 다음 줄들이 그대로 유실됩니다. 이 캐시는 같은 in 인스턴스에 대해
+// 항상 동일한 bufio.Reader를 재사용해 그 문제를 막습니다.
+//
+// 이 라이브러리의 전형적인 사용 패턴(프로세스 생애주기 동안 소수의 리더,
+// 대개 os.Stdin 하나)에서는 캐시가 무한정 커질 위험이 없습니다.
+var lineReaderCache sync.Map // map[io.Reader]*bufio.Reader
+
+// getLineReader in에 대응하는 *bufio.Reader를 반환합니다. 이미 생성된 적이 있으면
+// 캐시에서 재사용하고, 없으면 새로 만들어 캐시에 등록합니다. in의 동적 타입이
+// 비교 불가능한 경우(맵 키로 쓸 수 없는 경우)에는 캐시를 사용하지 않고 매번
+// 새로 생성합니다(과거 동작과 동일하게 안전하게 폴백).
+func getLineReader(in io.Reader) *bufio.Reader {
+	if br, ok := in.(*bufio.Reader); ok {
+		return br
+	}
+	if !reflect.TypeOf(in).Comparable() {
+		return bufio.NewReader(in)
+	}
+	if cached, ok := lineReaderCache.Load(in); ok {
+		return cached.(*bufio.Reader)
+	}
+	br := bufio.NewReader(in)
+	actual, _ := lineReaderCache.LoadOrStore(in, br)
+	return actual.(*bufio.Reader)
+}
+
+// readLine r에서 한 줄을 읽어 공백을 제거한 후 반환합니다.
+func readLine(r *bufio.Reader) (string, error) {
+	line, err := r.ReadString('\n')
 	if err != nil && line == "" {
 		return "", err
 	}

@@ -95,17 +95,17 @@ func WithPrefix(prefix string) BindOption {
 //	)
 func Load(target any, options ...BindOption) error {
 	if target == nil {
-		return fmt.Errorf("Load: target이 nil입니다")
+		return fmt.Errorf("Load: target is nil")
 	}
 	rv := reflect.ValueOf(target)
 	if rv.Kind() != reflect.Ptr {
-		return fmt.Errorf("Load: target은 포인터여야 합니다 (got %T)", target)
+		return fmt.Errorf("Load: target must be a pointer (got %T)", target)
 	}
 	if rv.IsNil() {
-		return fmt.Errorf("Load: target 포인터가 nil입니다")
+		return fmt.Errorf("Load: target pointer is nil")
 	}
 	if rv.Elem().Kind() != reflect.Struct {
-		return fmt.Errorf("Load: target은 구조체 포인터여야 합니다 (got %T)", target)
+		return fmt.Errorf("Load: target must be a pointer to a struct (got %T)", target)
 	}
 
 	loader := &configBindLoader{tagName: "wcli"}
@@ -160,15 +160,15 @@ func loadBindSource(src configSource) (map[string]any, error) {
 	case sourceDotEnv:
 		raw, err = loadDotEnvFile(src.path)
 	case sourceYAML:
-		content, err := os.ReadFile(src.path)
-		if err != nil {
-			return nil, err
+		content, readErr := os.ReadFile(src.path)
+		if readErr != nil {
+			return nil, readErr
 		}
 		raw, err = parseYAMLContent(string(content))
 	case sourceTOML:
-		content, err := os.ReadFile(src.path)
-		if err != nil {
-			return nil, err
+		content, readErr := os.ReadFile(src.path)
+		if readErr != nil {
+			return nil, readErr
 		}
 		raw, err = parseTOMLContent(string(content))
 	default:

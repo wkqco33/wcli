@@ -92,10 +92,11 @@ func (s *Spinner) Start(text string) {
 		return
 	}
 
+	done := make(chan struct{})
 	s.mu.Lock()
-	s.done = make(chan struct{})
+	s.done = done
 	s.mu.Unlock()
-	go s.animate()
+	go s.animate(done)
 }
 
 // Stop 스피너를 멈추고 완료 메시지를 출력합니다.
@@ -135,7 +136,11 @@ func (s *Spinner) UpdateText(text string) {
 	s.text = text
 }
 
-func (s *Spinner) animate() {
+// animate 스피너 애니메이션 루프입니다. done은 Start()에서 지역 변수로 캡처되어
+// 전달되므로, 매 반복 s.mu 없이 안전하게 참조할 수 있습니다(Stop()이 s.done
+// 필드를 락 하에 close/nil로 바꿔도 이 로컬 채널 값 자체는 영향받지 않음 —
+// 필드를 직접 재참조하면 락 없는 읽기/쓰기 데이터 레이스가 됩니다).
+func (s *Spinner) animate(done <-chan struct{}) {
 	s.mu.Lock()
 	style := s.style
 	s.mu.Unlock()
@@ -146,7 +151,7 @@ func (s *Spinner) animate() {
 	idx := 0
 	for {
 		select {
-		case <-s.done:
+		case <-done:
 			return
 		case <-ticker.C:
 			s.mu.Lock()

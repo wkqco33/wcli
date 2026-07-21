@@ -2,6 +2,7 @@ package rich_test
 
 import (
 	"bytes"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -75,6 +76,27 @@ func TestSpinner_StylesAndPreset(t *testing.T) {
 		time.Sleep(5 * time.Millisecond)
 		s.Stop("완료")
 	}
+}
+
+func TestSpinner_TerminalAnimateRace(t *testing.T) {
+	// isTerminal()은 *os.File이면서 문자 장치(ModeCharDevice)일 때만 true를
+	// 반환한다. bytes.Buffer를 쓰는 다른 테스트들은 이 조건을 만족하지 않아
+	// animate() goroutine이 아예 실행되지 않으므로, 스피너의 가장 중요한 실행
+	// 경로(실제 터미널에서의 애니메이션)가 테스트 커버리지 밖에 있었다.
+	// /dev/null은 문자 장치이므로 이를 이용해 animate() goroutine을 실제로
+	// 띄워 -race로 s.done 필드 접근에 대한 데이터 레이스를 검증한다.
+	f, err := os.OpenFile(os.DevNull, os.O_WRONLY, 0)
+	if err != nil {
+		t.Skipf("%s 열기 실패, 스킵: %v", os.DevNull, err)
+	}
+	defer f.Close()
+
+	s := rich.NewSpinner(f)
+	s.SetStyle(rich.SpinnerStyle{Frames: []string{"A", "B"}, Interval: time.Millisecond})
+	s.Start("동작 중")
+	time.Sleep(20 * time.Millisecond) // animate goroutine이 최소 몇 회 틱 하도록 대기
+	s.UpdateText("변경됨")
+	s.Stop("완료")
 }
 
 func TestSpinner_CustomStyle(t *testing.T) {

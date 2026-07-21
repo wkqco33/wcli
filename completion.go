@@ -24,7 +24,7 @@ func NewCompletionCommand(root *Command) *Command {
   your_app completion fish > ~/.config/fish/completions/your_app.fish`,
 		Run: func(ctx *Context) error {
 			if len(ctx.Args) == 0 {
-				return fmt.Errorf("셸 이름을 지정해주세요 (bash, zsh 또는 fish)")
+				return fmt.Errorf("please specify a shell (bash, zsh, or fish)")
 			}
 
 			shell := strings.ToLower(ctx.Args[0])
@@ -36,7 +36,7 @@ func NewCompletionCommand(root *Command) *Command {
 			case "fish":
 				return GenFishCompletion(root, root.outWriter())
 			default:
-				return fmt.Errorf("지원하지 않는 셸 타입: %s (bash, zsh, fish 중 하나를 지정하세요)", shell)
+				return fmt.Errorf("unsupported shell type: %s (must be one of: bash, zsh, fish)", shell)
 			}
 		},
 	}
