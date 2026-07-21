@@ -2,7 +2,9 @@ package logging
 
 import (
 	"bytes"
+	"io"
 	"strings"
+	"sync"
 	"testing"
 )
 
@@ -106,4 +108,31 @@ func TestGlobalLogger(t *testing.T) {
 	if _, ok := GetLogger().(*NoOpLogger); !ok {
 		t.Errorf("expected GetLogger to return NoOpLogger after setting nil")
 	}
+}
+
+// TestGlobalLoggerConcurrentAccess SetLogger와 Debug/Info/Warn/Error(내부적으로
+// GetLogger를 거침)를 여러 goroutine에서 동시에 호출해도 데이터 레이스가 없는지
+// 확인합니다. config 패키지의 configStore처럼 뮤텍스로 보호되기 전에는 이 테스트를
+// `go test -race`로 돌리면 검출됐어야 합니다.
+func TestGlobalLoggerConcurrentAccess(t *testing.T) {
+	defer SetLogger(nil)
+
+	// io.Discard는 동시 쓰기에 안전(내부 상태 없이 바이트를 버림)하므로,
+	// 이 테스트에서 검출하려는 레이스가 Writer 자체가 아니라 오직
+	// SetLogger/GetLogger의 전역 상태 접근에 있도록 한다.
+	var wg sync.WaitGroup
+	const n = 50
+
+	wg.Add(n * 2)
+	for i := 0; i < n; i++ {
+		go func() {
+			defer wg.Done()
+			SetLogger(NewDefaultLogger(io.Discard, LevelDebug, false))
+		}()
+		go func(i int) {
+			defer wg.Done()
+			Debug("goroutine %d", i)
+		}(i)
+	}
+	wg.Wait()
 }

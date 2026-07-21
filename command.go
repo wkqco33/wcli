@@ -185,7 +185,7 @@ func (c *Command) ExecuteContext(parent context.Context, args []string) error {
 		}
 		logger.Log(logging.LevelError, "Command %q failed: %v", c.Name(), err)
 		if !c.SilenceErrors {
-			rich.Fprintln(c.errWriter(), "[red][bold]Error:[/bold] %s[/red]", err.Error())
+			rich.Fprintln(c.errWriter(), "[red][bold]Error:[/bold] %s[/red]", rich.EscapeMarkup(err.Error()))
 		}
 	} else {
 		logger.Log(logging.LevelDebug, "Command %q executed successfully", c.Name())

@@ -516,5 +516,5 @@ func AutoDiscoverConfig(appName string, extraPaths ...string) error {
 		}
 	}
 
-	return fmt.Errorf("설정 파일을 찾을 수 없습니다 (앱명: %s)", appName)
+	return fmt.Errorf("config file not found (app: %s)", appName)
 }

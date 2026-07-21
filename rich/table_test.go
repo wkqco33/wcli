@@ -61,4 +61,27 @@ func TestTable_Render(t *testing.T) {
 			t.Error("메서드 체이닝이 올바르게 동작하지 않습니다")
 		}
 	})
+
+	t.Run("셀 마크업이 있어도 정렬이 어긋나지 않음", func(t *testing.T) {
+		// 마크업 태그는 표시 폭 계산에서 제외되어야 하므로, 터미널이 아닌
+		// 환경(color 미적용)에서는 태그가 제거된 채로 다른 셀과 폭이 맞아야 한다.
+		var buf strings.Builder
+		tbl := rich.NewTable("이름", "상태")
+		tbl.AddRow("김철수", "[green]정상[/green]")
+		tbl.AddRow("이영희", "[red]오류[/red]")
+		tbl.Render(&buf)
+
+		output := buf.String()
+		if strings.Contains(output, "[green]") || strings.Contains(output, "[/red]") {
+			t.Errorf("터미널이 아닌 환경에서는 마크업 태그가 제거되어야 합니다: %q", output)
+		}
+
+		lines := strings.Split(strings.TrimRight(output, "\n"), "\n")
+		want := rich.DisplayWidth(lines[0])
+		for i, l := range lines {
+			if w := rich.DisplayWidth(l); w != want {
+				t.Errorf("줄 %d 표시폭=%d, 기대=%d (%q)", i, w, want, l)
+			}
+		}
+	})
 }

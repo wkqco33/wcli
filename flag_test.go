@@ -256,3 +256,37 @@ func TestFlagErrorHandling(t *testing.T) {
 		t.Errorf("에러가 발생해야 함 (알 수 없는 플래그)")
 	}
 }
+
+// TestRequiredFlagValidationDeterministic 필수 플래그가 둘 이상 동시에
+// 누락된 경우, Validate()가 항상 동일한(이름순으로 가장 앞선) 플래그를
+// 보고하는지 확인합니다. 내부적으로 map을 그대로 순회하면 Go의 무작위
+// 맵 순회 순서 때문에 실행마다 다른 플래그가 보고될 수 있습니다.
+func TestRequiredFlagValidationDeterministic(t *testing.T) {
+	var zeta, alpha, mid string
+
+	fs := wcli.NewFlagSet()
+	// 등록 순서를 알파벳 순서와 다르게 섞어, 등록 순서가 아니라 정렬 순서로
+	// 보고되는지도 함께 검증한다.
+	fs.StringVar(&zeta, "zeta", "", "", "z")
+	fs.StringVar(&alpha, "alpha", "", "", "a")
+	fs.StringVar(&mid, "mid", "", "", "m")
+	for _, name := range []string{"zeta", "alpha", "mid"} {
+		if err := fs.MarkRequired(name); err != nil {
+			t.Fatalf("MarkRequired(%s) 실패: %v", name, err)
+		}
+	}
+
+	for i := 0; i < 50; i++ {
+		err := fs.Validate()
+		if err == nil {
+			t.Fatal("세 플래그 모두 미설정 상태이므로 에러가 발생해야 함")
+		}
+		valErr, ok := err.(*wcli.ValidationError)
+		if !ok {
+			t.Fatalf("*wcli.ValidationError 기대, 실제: %T", err)
+		}
+		if valErr.FlagName != "alpha" {
+			t.Fatalf("반복 #%d: 이름순으로 가장 앞선 'alpha'가 보고되어야 하지만 실제: %q", i, valErr.FlagName)
+		}
+	}
+}

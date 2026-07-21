@@ -207,7 +207,11 @@ func (f *FlagSet) Validate() error {
 	}
 
 	// 4. 필수 플래그 누락 및 개별 검증 검사
-	for _, flag := range f.flags {
+	// f.flags(map) 대신 이름순으로 정렬된 f.All()을 순회해야 한다: 맵 순회
+	// 순서는 실행마다 무작위이므로, 필수 플래그가 둘 이상 동시에 누락된 경우
+	// map을 그대로 순회하면 완전히 동일한 커맨드 실행에도 매번 다른 플래그가
+	// "누락됨"으로 보고되어 에러 메시지가 비결정적이 된다.
+	for _, flag := range f.All() {
 		if flag.required && !flag.wasSet {
 			return &ValidationError{
 				FlagName: flag.Name,

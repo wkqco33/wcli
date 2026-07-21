@@ -3,6 +3,7 @@ package config_test
 import (
 	"os"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/seoyc/wcli/config"
@@ -223,5 +224,27 @@ func TestLoadSliceBinding(t *testing.T) {
 	expectedPorts := []int{80, 443, 8080}
 	if !reflect.DeepEqual(cfg.Ports, expectedPorts) {
 		t.Errorf("Ports 바인딩 실패: %v, 기대: %v", cfg.Ports, expectedPorts)
+	}
+}
+
+// TestLoadYAMLParseErrorPropagates YAML/TOML 파싱 실패 시 config.Load가 에러를
+// 삼키지 않고 실제로 반환하는지 확인합니다(loadBindSource 내부의 err 변수
+// 섀도잉으로 파싱 에러가 무시되던 회귀를 방지).
+func TestLoadYAMLParseErrorPropagates(t *testing.T) {
+	// bufio.Scanner의 기본 토큰 한도(약 64KB)를 넘는 한 줄을 만들어
+	// parseYAMLContent가 scanner.Err()로 실제 에러를 반환하도록 강제한다.
+	tooLong := "name: " + strings.Repeat("x", 70000) + "\n"
+	if err := os.WriteFile("test_toolong.yaml", []byte(tooLong), 0644); err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove("test_toolong.yaml")
+
+	type cfg struct {
+		Name string `wcli:"name"`
+	}
+	var c cfg
+	err := config.Load(&c, config.WithFiles("test_toolong.yaml"))
+	if err == nil {
+		t.Fatalf("파싱 실패가 예상되었지만 config.Load가 에러 없이 성공했습니다 (c=%+v)", c)
 	}
 }

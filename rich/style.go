@@ -88,10 +88,16 @@ func isTerminal(w io.Writer) bool {
 }
 
 // stripMarkup 마크업 태그를 제거하고 일반 텍스트를 반환합니다.
+// Markup()과 동일한 규칙으로 태그 여부를 판별합니다: 알려진 여는 태그와 모든 닫는
+// 태그([/xxx])만 제거되고, tagMap에 없는 대괄호 텍스트(예: "[red, blue] 중 선택")는
+// 리터럴로 보존됩니다. 이 판별을 Markup()과 다르게 하면 색상 미지원 환경(stripMarkup
+// 경로)에서 실제 마크업이 아닌 텍스트가 유실되거나, 폭 계산(DisplayWidth)이 실제
+// 출력과 어긋나는 문제가 생깁니다.
 func stripMarkup(text string) string {
 	var result strings.Builder
 	runes := []rune(text)
 	inTag := false
+	var currentTag strings.Builder
 	for i := 0; i < len(runes); i++ {
 		char := runes[i]
 		if char == '[' {
@@ -105,17 +111,41 @@ func stripMarkup(text string) string {
 				continue
 			}
 			inTag = true
+			currentTag.Reset()
 			continue
 		}
 		if char == ']' && inTag {
 			inTag = false
+			tag := currentTag.String()
+			if strings.HasPrefix(tag, "/") {
+				// Markup()과 동일하게 닫는 태그는 알려진 이름 여부와 무관하게 항상 제거됨
+				continue
+			}
+			if _, ok := tagMap[tag]; ok {
+				continue
+			}
+			// 알 수 없는 여는 태그: Markup()과 동일하게 리터럴로 복원
+			result.WriteRune('[')
+			result.WriteString(tag)
+			result.WriteRune(']')
 			continue
 		}
-		if !inTag {
+		if inTag {
+			currentTag.WriteRune(char)
+		} else {
 			result.WriteRune(char)
 		}
 	}
 	return result.String()
+}
+
+// EscapeMarkup s에 포함된 '['를 이스케이프하여 Markup()/stripMarkup()이 태그로
+// 해석하지 않도록 만듭니다. 에러 메시지, 사용자 입력 등 마크업을 의도하지 않은
+// 동적 문자열을 마크업 포맷 문자열에 끼워 넣을 때 사용하세요. 그렇지 않으면
+// 대괄호를 쓰는 흔한 표기(예: "허용값: [red] 또는 [blue]")가 실제 색상 태그로
+// 오인되어 유실되거나 의도치 않게 스타일이 적용될 수 있습니다.
+func EscapeMarkup(s string) string {
+	return strings.ReplaceAll(s, "[", "\\[")
 }
 
 // markupCache Markup() 결과를 캐시합니다. 동일 문자열은 한 번만 파싱됩니다.
