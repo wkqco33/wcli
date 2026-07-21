@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### 변경 (Changed)
+- **빌드 태스크 러너를 Makefile에서 Task(`Taskfile.yml`)로 전환**
+  - `make <target>` 대신 `task <target>`으로 빌드/테스트/린트/설치 등의 개발 워크플로우를 실행.
+  - 기존 Makefile의 모든 타겟(build, test, test-v, bench, cover, cover-pct, vet, fmt, fmt-check, lint, check, install, uninstall, tidy, deps, clean)을 동일한 동작으로 이식.
+  - `task --list` 또는 인자 없이 `task`만 실행하면 태스크 목록과 설명을 출력.
+
 ### 추가 (Added)
 - **다양한 스피너(Spinner) 스타일 프리셋 추가**
   - 브라이유 점자 외에 `SpinnerDots`, `SpinnerLine`, `SpinnerCircle`, `SpinnerArrow`, `SpinnerBouncing` 프리셋 추가.
