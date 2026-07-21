@@ -686,17 +686,19 @@ wcli doctor
 | replace 경로 유효성 | go.mod replace 지시어의 경로 존재 여부 |
 | wcli:commands 마커 | main.go에 자동 등록 마커 포함 여부 |
 
-## Makefile 타겟
+## Taskfile 타겟
+
+이 저장소의 개발 워크플로우는 [Task](https://taskfile.dev)(`Taskfile.yml`)로 관리됩니다. `task --list`로 전체 목록과 설명을 확인할 수 있습니다.
 
 ```
-make build       # 컴파일 오류 확인
-make test        # 전체 테스트
-make test-v      # 상세 테스트 출력
-make bench       # 벤치마크
-make cover       # 커버리지 HTML 리포트
-make check       # fmt-check + vet + test
-make fmt         # 코드 포맷 적용
-make vet         # 정적 분석
-make tidy        # go mod tidy
-make clean       # 빌드 아티팩트 제거
+task build       # 컴파일 오류 확인
+task test        # 전체 테스트
+task test-v      # 상세 테스트 출력
+task bench       # 벤치마크
+task cover       # 커버리지 HTML 리포트
+task check       # fmt-check + vet + test
+task fmt         # 코드 포맷 적용
+task vet         # 정적 분석
+task tidy        # go mod tidy
+task clean       # 빌드 아티팩트 제거
 ```
