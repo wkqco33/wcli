@@ -27,6 +27,7 @@ const (
 type Flag struct {
 	Name       string
 	Shorthand  string
+	Category   string
 	Usage      string
 	Type       FlagType
 	DefaultVal string // 기본값 (도움말 출력용)
@@ -98,6 +99,16 @@ func (f *FlagSet) SetValidation(name string, fn func(string) error) error {
 		return &FlagError{FlagName: name, Err: fmt.Errorf("flag '%s' not found", name)}
 	}
 	flag.validate = fn
+	return nil
+}
+
+// SetCategory 플래그 도움말 분류 이름을 설정합니다.
+func (f *FlagSet) SetCategory(name, category string) error {
+	flag, ok := f.flags[name]
+	if !ok {
+		return &FlagError{FlagName: name, Err: fmt.Errorf("flag '%s' not found", name)}
+	}
+	flag.Category = category
 	return nil
 }
 

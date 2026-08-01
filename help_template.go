@@ -31,6 +31,8 @@ const DefaultHelpTemplate = `{{if .Long}}{{.Long}}{{else}}{{.Short}}{{end}}
 {{end}}{{end}}
 {{if .HasLocalFlags}}[bold][yellow]Flags:[/yellow][/bold]
 {{range .LocalFlags}}  {{.ShortPart}}{{.FlagPart}}{{.RequiredMark}}   {{.Usage}}{{.DefaultPart}}
+{{end}}{{range .LocalFlagGroups}}  [bold]{{.GroupName}}:[/bold]
+{{range .Flags}}    {{.ShortPart}}{{.FlagPart}}{{.RequiredMark}}   {{.Usage}}{{.DefaultPart}}
 {{end}}  [green]-h[/green], [green]--help[/green]          print help
 {{if .Version}}      [green]--version[/green]       print version
 {{end}}
@@ -41,6 +43,8 @@ const DefaultHelpTemplate = `{{if .Long}}{{.Long}}{{else}}{{.Short}}{{end}}
 {{end}}
 {{if .HasGlobalFlags}}[bold][yellow]Global Flags:[/yellow][/bold]
 {{range .GlobalFlags}}  {{.ShortPart}}{{.FlagPart}}{{.RequiredMark}}   {{.Usage}}{{.DefaultPart}}
+{{end}}{{range .GlobalFlagGroups}}  [bold]{{.GroupName}}:[/bold]
+{{range .Flags}}    {{.ShortPart}}{{.FlagPart}}{{.RequiredMark}}   {{.Usage}}{{.DefaultPart}}
 {{end}}
 {{end}}
 {{if .HasSubCommands}}Use "[cyan]{{cleanUse .Use}} [command] --help[/cyan]" for more information about a command.
@@ -62,8 +66,10 @@ type helpData struct {
 	GroupedCmds      []commandGroupData
 	HasLocalFlags    bool
 	LocalFlags       []flagHelpData
+	LocalFlagGroups  []flagGroupData
 	HasGlobalFlags   bool
 	GlobalFlags      []flagHelpData
+	GlobalFlagGroups []flagGroupData
 	HasFlagGroupNote bool
 	FlagGroupNotes   []string // ["mutually exclusive: --json, --yaml"]
 }
@@ -87,6 +93,11 @@ type flagHelpData struct {
 	RequiredMark string
 	Usage        string
 	DefaultPart  string
+}
+
+type flagGroupData struct {
+	GroupName string
+	Flags     []flagHelpData
 }
 
 // renderHelpTemplate 주어진 템플릿과 커맨드 데이터를 사용해 도움말을 렌더링하여 w에 씁니다.
@@ -202,22 +213,12 @@ func buildHelpData(cmd *Command) helpData {
 	}
 
 	localFlags := cmd.ownFlags()
-	data.HasLocalFlags = len(localFlags) > 0
-	if data.HasLocalFlags {
-		data.LocalFlags = make([]flagHelpData, len(localFlags))
-		for i, f := range localFlags {
-			data.LocalFlags[i] = buildFlagHelpData(f)
-		}
-	}
+	data.LocalFlags, data.LocalFlagGroups = buildGroupedFlagHelpData(localFlags)
+	data.HasLocalFlags = len(data.LocalFlags) > 0 || len(data.LocalFlagGroups) > 0
 
 	inheritedFlags := cmd.inheritedPersistentFlags()
-	data.HasGlobalFlags = len(inheritedFlags) > 0
-	if data.HasGlobalFlags {
-		data.GlobalFlags = make([]flagHelpData, len(inheritedFlags))
-		for i, f := range inheritedFlags {
-			data.GlobalFlags[i] = buildFlagHelpData(f)
-		}
-	}
+	data.GlobalFlags, data.GlobalFlagGroups = buildGroupedFlagHelpData(inheritedFlags)
+	data.HasGlobalFlags = len(data.GlobalFlags) > 0 || len(data.GlobalFlagGroups) > 0
 
 	// flag group 주석 수집 — 로컬 + persistent 플래그셋의 그룹 목록을 직접 읽음
 	// (buildCombinedFlagSet의 merge()는 group 목록을 복사하지 않으므로 직접 접근)
@@ -237,6 +238,38 @@ func buildHelpData(cmd *Command) helpData {
 	data.HasFlagGroupNote = len(data.FlagGroupNotes) > 0
 
 	return data
+}
+
+func buildGroupedFlagHelpData(flags []*Flag) ([]flagHelpData, []flagGroupData) {
+	if len(flags) == 0 {
+		return nil, nil
+	}
+
+	ungrouped := make([]flagHelpData, 0, len(flags))
+	groupOrder := []string{}
+	groupMap := map[string][]flagHelpData{}
+
+	for _, f := range flags {
+		entry := buildFlagHelpData(f)
+		if f.Category == "" {
+			ungrouped = append(ungrouped, entry)
+			continue
+		}
+		if _, exists := groupMap[f.Category]; !exists {
+			groupOrder = append(groupOrder, f.Category)
+		}
+		groupMap[f.Category] = append(groupMap[f.Category], entry)
+	}
+
+	groups := make([]flagGroupData, 0, len(groupOrder))
+	for _, name := range groupOrder {
+		groups = append(groups, flagGroupData{
+			GroupName: name,
+			Flags:     groupMap[name],
+		})
+	}
+
+	return ungrouped, groups
 }
 
 func buildFlagHelpData(f *Flag) flagHelpData {

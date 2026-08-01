@@ -206,6 +206,18 @@ cmd.Flags().DurationVar(&timeout, "timeout", "t", 5*time.Second, "타임아웃")
 cmd.Flags().StringSliceVar(&tags, "tag", "", nil, "태그 (반복 가능)")
 ```
 
+### 도움말 카테고리 분류
+
+도움말이 길어질 때는 플래그를 카테고리별로 나눠 표시할 수 있습니다.
+
+```go
+cmd.Flags().StringVar(&host, "host", "H", "localhost", "대상 호스트")
+cmd.Flags().StringVar(&token, "token", "t", "", "인증 토큰")
+
+cmd.Flags().SetCategory("host", "연결")
+cmd.Flags().SetCategory("token", "인증")
+```
+
 ### Persistent 플래그 (하위 커맨드 상속)
 
 ```go
