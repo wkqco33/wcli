@@ -536,3 +536,80 @@ func AutoDiscoverConfig(appName string, extraPaths ...string) error {
 
 	return fmt.Errorf("config file not found (app: %s)", appName)
 }
+
+// OnConfigChange 설정 파일 변경 시 호출될 콜백 타입
+type OnConfigChange func()
+
+// watcherMu WatchConfig/StopWatching 동기화용 뮤텍스
+var watcherMu sync.Mutex
+var watcherRunning bool
+var watcherStop chan struct{}
+
+// WatchConfig 설정 파일 변경을 폴링 방식으로 감시합니다.
+// 변경이 감지되면 ReadInConfig()를 다시 호출하고 callback을 실행합니다.
+// interval이 0이면 기본값 2초를 사용합니다.
+// 이미 실행 중인 감시가 있으면 중단 후 새로 시작합니다.
+func WatchConfig(interval time.Duration, callback OnConfigChange) error {
+	watcherMu.Lock()
+	defer watcherMu.Unlock()
+
+	if watcherRunning {
+		close(watcherStop)
+		watcherRunning = false
+	}
+
+	globalConfig.mu.RLock()
+	configPath := globalConfig.configPath
+	globalConfig.mu.RUnlock()
+
+	if configPath == "" {
+		return fmt.Errorf("config file path is not set")
+	}
+
+	if interval <= 0 {
+		interval = 2 * time.Second
+	}
+
+	watcherStop = make(chan struct{})
+	watcherRunning = true
+
+	go func() {
+		lastMod := getFileModTime(configPath)
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-watcherStop:
+				return
+			case <-ticker.C:
+				if mod := getFileModTime(configPath); mod != lastMod {
+					lastMod = mod
+					if err := ReloadConfig(); err == nil && callback != nil {
+						callback()
+					}
+				}
+			}
+		}
+	}()
+
+	return nil
+}
+
+// StopWatching 설정 파일 감시를 중단합니다.
+func StopWatching() {
+	watcherMu.Lock()
+	defer watcherMu.Unlock()
+	if watcherRunning {
+		close(watcherStop)
+		watcherRunning = false
+	}
+}
+
+func getFileModTime(path string) time.Time {
+	info, err := statFunc(path)
+	if err != nil {
+		return time.Time{}
+	}
+	return info.ModTime()
+}
