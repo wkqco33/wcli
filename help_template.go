@@ -33,7 +33,7 @@ const DefaultHelpTemplate = `{{if .Long}}{{.Long}}{{else}}{{.Short}}{{end}}
 {{range .LocalFlags}}  {{.ShortPart}}{{.FlagPart}}{{.RequiredMark}}   {{.Usage}}{{.DefaultPart}}
 {{end}}{{range .LocalFlagGroups}}  [bold]{{.GroupName}}:[/bold]
 {{range .Flags}}    {{.ShortPart}}{{.FlagPart}}{{.RequiredMark}}   {{.Usage}}{{.DefaultPart}}
-{{end}}  [green]-h[/green], [green]--help[/green]          print help
+{{end}}{{end}}  [green]-h[/green], [green]--help[/green]          print help
 {{if .Version}}      [green]--version[/green]       print version
 {{end}}
 {{if .HasFlagGroupNote}}[bold][yellow]Flag Constraints:[/yellow][/bold]
@@ -45,6 +45,7 @@ const DefaultHelpTemplate = `{{if .Long}}{{.Long}}{{else}}{{.Short}}{{end}}
 {{range .GlobalFlags}}  {{.ShortPart}}{{.FlagPart}}{{.RequiredMark}}   {{.Usage}}{{.DefaultPart}}
 {{end}}{{range .GlobalFlagGroups}}  [bold]{{.GroupName}}:[/bold]
 {{range .Flags}}    {{.ShortPart}}{{.FlagPart}}{{.RequiredMark}}   {{.Usage}}{{.DefaultPart}}
+{{end}}
 {{end}}
 {{end}}
 {{if .HasSubCommands}}Use "[cyan]{{cleanUse .Use}} [command] --help[/cyan]" for more information about a command.
