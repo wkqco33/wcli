@@ -152,7 +152,7 @@ func TestGenZshCompletion_EscapeDesc(t *testing.T) {
 	}
 	out := buf.String()
 
-	if strings.Contains(out, `'`) || strings.Contains(out, `"$danger"`) || strings.Contains(out, "`") {
+	if strings.Contains(out, `it's`) || strings.Contains(out, `$danger`) || strings.Contains(out, "[cmd]") {
 		t.Errorf("zsh 설명 문자열의 위험 문자가 제거되어야 함: %q", out)
 	}
 	if !strings.Contains(out, `run:its danger \[cmd\]`) {

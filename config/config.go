@@ -26,10 +26,10 @@ var globalConfig = &configStore{
 }
 
 var (
-	lookupEnvFunc  = os.LookupEnv
+	lookupEnvFunc   = os.LookupEnv
 	userHomeDirFunc = os.UserHomeDir
-	readFileFunc   = os.ReadFile
-	statFunc       = os.Stat
+	readFileFunc    = os.ReadFile
+	statFunc        = os.Stat
 )
 
 // Reset 전역 설정 상태를 초기화합니다.
@@ -271,7 +271,6 @@ func GetStringSlice(key string) []string {
 	}
 	return []string{fmt.Sprintf("%v", val)}
 }
-
 
 // Set 설정 맵에 계층형 점 표기법으로 값을 설정합니다.
 func Set(key string, value any) {
