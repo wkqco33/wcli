@@ -154,3 +154,54 @@ func TestSprint(t *testing.T) {
 		t.Errorf("Sprint() = %q, want %q", sprintResult, result)
 	}
 }
+
+func TestMarkup_TrueColor(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "TrueColor hex 전경",
+			input:    "[#ff4500]주황[/#ff4500]",
+			expected: "\033[38;2;255;69;0m주황",
+		},
+		{
+			name:     "TrueColor hex 배경",
+			input:    "[bg-#ff0000]빨간배경[/bg-#ff0000]",
+			expected: "\033[48;2;255;0;0m빨간배경",
+		},
+		{
+			name:     "256색 전경",
+			input:    "[color(208)]주황[/color(208)]",
+			expected: "\033[38;5;208m주황",
+		},
+		{
+			name:     "256색 배경",
+			input:    "[bg-color(196)]빨간배경[/bg-color(196)]",
+			expected: "\033[48;5;196m빨간배경",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := rich.Markup(tt.input)
+			if !strings.Contains(got, tt.expected) {
+				t.Errorf("Markup() = %q, want to contain %q", got, tt.expected)
+			}
+		})
+	}
+}
+
+func TestMarkup_TrueColorStrip(t *testing.T) {
+	// 비터미널 환경에서 TrueColor/256색 태그가 제거되는지 확인
+	var buf bytes.Buffer
+	rich.Fprintln(&buf, "[#ff4500]컬러[/#ff4500] [color(208)]256색[/color(208)]")
+	got := strings.TrimRight(buf.String(), "\n")
+	if strings.Contains(got, "[#ff4500]") || strings.Contains(got, "[color(208)]") {
+		t.Errorf("비터미널 환경에서 컬러 태그가 제거되어야 함: %q", got)
+	}
+	if !strings.Contains(got, "컬러") || !strings.Contains(got, "256색") {
+		t.Errorf("컬러 태그 내 텍스트는 보존되어야 함: %q", got)
+	}
+}

@@ -134,6 +134,26 @@ func (f *FlagSet) BindConfig(name, configKey string) error {
 	return nil
 }
 
+// MarkAllowed 플래그에 허용 가능한 값 목록을 설정합니다.
+// 파싱된 값이 목록에 없으면 ValidationError를 반환합니다.
+func (f *FlagSet) MarkAllowed(name string, allowed ...string) error {
+	flag, ok := f.flags[name]
+	if !ok {
+		return &FlagError{FlagName: name, Err: fmt.Errorf("flag '%s' not found", name)}
+	}
+	allowedSet := make(map[string]struct{}, len(allowed))
+	for _, a := range allowed {
+		allowedSet[a] = struct{}{}
+	}
+	flag.validate = func(val string) error {
+		if _, ok := allowedSet[val]; !ok {
+			return fmt.Errorf("value must be one of: %s", strings.Join(allowed, ", "))
+		}
+		return nil
+	}
+	return nil
+}
+
 // MarkFlagsMutuallyExclusive 플래그 목록을 상호 배제하도록 지정합니다. 지정된 플래그들 중 하나만 설정되어야 합니다.
 func (f *FlagSet) MarkFlagsMutuallyExclusive(names ...string) {
 	f.exclusiveGroups = append(f.exclusiveGroups, names)

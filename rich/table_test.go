@@ -85,3 +85,64 @@ func TestTable_Render(t *testing.T) {
 		}
 	})
 }
+
+func TestTable_AlignRight(t *testing.T) {
+	var buf strings.Builder
+	tbl := rich.NewTable("항목", "값")
+	tbl.SetAlign(rich.AlignLeft, rich.AlignRight)
+	tbl.AddRow("나이", "30")
+	tbl.AddRow("키", "175.5")
+	tbl.Render(&buf)
+
+	output := buf.String()
+	lines := strings.Split(strings.TrimRight(output, "\n"), "\n")
+	for _, l := range lines {
+		if strings.Contains(l, "30") || strings.Contains(l, "175.5") {
+			if !strings.HasPrefix(strings.TrimSpace(l), "|") {
+				t.Errorf("우측 정렬 행 형식이 예상과 다름: %q", l)
+			}
+		}
+	}
+}
+
+func TestTable_AlignCenter(t *testing.T) {
+	var buf strings.Builder
+	tbl := rich.NewTable("이름", "역할")
+	tbl.SetAlign(rich.AlignCenter, rich.AlignCenter)
+	tbl.AddRow("홍길동", "개발자")
+	tbl.Render(&buf)
+
+	output := buf.String()
+	if !strings.Contains(output, "홍길동") || !strings.Contains(output, "개발자") {
+		t.Error("가운데 정렬 테이블에 데이터가 없습니다")
+	}
+}
+
+func TestTable_MaxWidth(t *testing.T) {
+	var buf strings.Builder
+	tbl := rich.NewTable("이름", "설명")
+	tbl.AddRow("짧음", "짧은텍스트")
+	tbl.AddRow("김철수", "이것은매우긴설명텍스트입니다")
+	tbl.SetMaxWidth(30)
+	tbl.Render(&buf)
+
+	output := buf.String()
+	lines := strings.Split(strings.TrimRight(output, "\n"), "\n")
+	for _, l := range lines {
+		if w := rich.DisplayWidth(l); w > 30 {
+			t.Errorf("줄 표시폭=%d, 최대 30을 초과함: %q", w, l)
+		}
+	}
+}
+
+func TestTable_ChainingWithAlign(t *testing.T) {
+	var buf strings.Builder
+	rich.NewTable("A", "B", "C").
+		AddRow("1", "2", "3").
+		SetAlign(rich.AlignRight, rich.AlignCenter, rich.AlignLeft).
+		Render(&buf)
+	output := buf.String()
+	if !strings.Contains(output, "1") || !strings.Contains(output, "2") || !strings.Contains(output, "3") {
+		t.Error("체이닝 + 정렬 조합이 올바르게 동작하지 않습니다")
+	}
+}

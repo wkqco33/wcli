@@ -136,3 +136,15 @@ func TestFPrompt_ReuseSameReaderAcrossCalls(t *testing.T) {
 		t.Errorf("세 번째 값 기대: third, 실제: %q", c)
 	}
 }
+
+func TestFPasswordPrompt(t *testing.T) {
+	in := strings.NewReader("mysecret\n")
+	var out bytes.Buffer
+	result, err := rich.FPasswordPrompt(&out, in, "비밀번호")
+	if err != nil {
+		t.Fatalf("FPasswordPrompt 오류: %v", err)
+	}
+	if result != "mysecret" {
+		t.Errorf("비밀번호 값 기대: mysecret, 실제: %q", result)
+	}
+}
