@@ -249,6 +249,79 @@ key = "/etc/ssl/key.pem"
 	}
 }
 
+func TestConfigArraySupportAcrossFormats(t *testing.T) {
+	tests := []struct {
+		name         string
+		ext          string
+		content      string
+		expectedIPs  []string
+		expectedTags []string
+		expectedNone []string
+	}{
+		{
+			name:         "json",
+			ext:          ".json",
+			content:      `{"ips":["127.0.0.1","10.0.0.1"],"tags":["prod"],"empty":[]}`,
+			expectedIPs:  []string{"127.0.0.1", "10.0.0.1"},
+			expectedTags: []string{"prod"},
+			expectedNone: []string{},
+		},
+		{
+			name: "yaml",
+			ext:  ".yaml",
+			content: "ips:\n" +
+				"  - 127.0.0.1\n" +
+				"  - 10.0.0.1\n" +
+				"tags: [prod]\n" +
+				"empty: []\n",
+			expectedIPs:  []string{"127.0.0.1", "10.0.0.1"},
+			expectedTags: []string{"prod"},
+			expectedNone: []string{},
+		},
+		{
+			name:         "toml",
+			ext:          ".toml",
+			content:      "ips = [\"127.0.0.1\", \"10.0.0.1\"]\ntags = [\"prod\"]\nempty = []\n",
+			expectedIPs:  []string{"127.0.0.1", "10.0.0.1"},
+			expectedTags: []string{"prod"},
+			expectedNone: []string{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			resetConfigState(t)
+			tmpFile, err := os.CreateTemp("", "config-array-*"+tt.ext)
+			if err != nil {
+				t.Fatalf("임시 파일 생성 실패: %v", err)
+			}
+			defer os.Remove(tmpFile.Name())
+			if _, err := tmpFile.Write([]byte(tt.content)); err != nil {
+				t.Fatalf("임시 파일 쓰기 실패: %v", err)
+			}
+			tmpFile.Close()
+
+			config.SetConfigFile(tmpFile.Name())
+			if tt.ext == ".json" {
+				config.SetConfigType("json")
+			}
+			if err := config.ReadInConfig(); err != nil {
+				t.Fatalf("ReadInConfig 실패: %v", err)
+			}
+
+			if got := config.GetStringSlice("ips"); !reflect.DeepEqual(got, tt.expectedIPs) {
+				t.Fatalf("ips 배열 파싱 실패: got=%v want=%v", got, tt.expectedIPs)
+			}
+			if got := config.GetStringSlice("tags"); !reflect.DeepEqual(got, tt.expectedTags) {
+				t.Fatalf("tags 단일 배열 파싱 실패: got=%v want=%v", got, tt.expectedTags)
+			}
+			if got := config.GetStringSlice("empty"); !reflect.DeepEqual(got, tt.expectedNone) {
+				t.Fatalf("empty 배열 파싱 실패: got=%v want=%v", got, tt.expectedNone)
+			}
+		})
+	}
+}
+
 func TestAutoDiscoverConfig_Found(t *testing.T) {
 	resetConfigState(t)
 	dir := t.TempDir()

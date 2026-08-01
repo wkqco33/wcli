@@ -2,6 +2,7 @@ package config
 
 import (
 	"bufio"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -26,6 +27,7 @@ type SourceType int
 const (
 	sourceEnv SourceType = iota
 	sourceDotEnv
+	sourceJSON
 	sourceYAML
 	sourceTOML
 )
@@ -58,12 +60,14 @@ func WithDotEnv(path string) BindOption {
 	}
 }
 
-// WithFiles YAML 또는 TOML 파일들을 소스로 추가합니다.
+// WithFiles JSON, YAML 또는 TOML 파일들을 소스로 추가합니다.
 func WithFiles(paths ...string) BindOption {
 	return func(l *configBindLoader) {
 		for _, path := range paths {
 			ext := strings.ToLower(filepath.Ext(path))
 			switch ext {
+			case ".json":
+				l.sources = append(l.sources, configSource{stype: sourceJSON, path: path})
 			case ".yaml", ".yml":
 				l.sources = append(l.sources, configSource{stype: sourceYAML, path: path})
 			case ".toml":
@@ -165,6 +169,14 @@ func loadBindSource(src configSource) (map[string]any, error) {
 		raw, err = loadSystemEnv()
 	case sourceDotEnv:
 		raw, err = loadDotEnvFile(src.path)
+	case sourceJSON:
+		content, readErr := os.ReadFile(src.path)
+		if readErr != nil {
+			return nil, readErr
+		}
+		if err := json.Unmarshal(content, &raw); err != nil {
+			return nil, fmt.Errorf("parse json config error: %w", err)
+		}
 	case sourceYAML:
 		content, readErr := os.ReadFile(src.path)
 		if readErr != nil {
