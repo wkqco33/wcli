@@ -461,3 +461,43 @@ func TestFuzzyCommandSuggestion(t *testing.T) {
 		}
 	})
 }
+
+func TestExecuteWritesErrorToErrWriter(t *testing.T) {
+	var errBuf strings.Builder
+	cmd := &wcli.Command{
+		Use:       "app",
+		ErrWriter: &errBuf,
+		Run: func(ctx *wcli.Context) error {
+			return fmt.Errorf("boom [danger]")
+		},
+	}
+
+	err := cmd.Execute(nil)
+	if err == nil {
+		t.Fatal("에러가 반환되어야 함")
+	}
+	out := errBuf.String()
+	if !strings.Contains(out, "Error:") || !strings.Contains(out, "boom [danger]") {
+		t.Fatalf("ErrWriter 출력이 예상과 다름: %q", out)
+	}
+}
+
+func TestExecuteSilenceErrorsSuppressesErrWriter(t *testing.T) {
+	var errBuf strings.Builder
+	cmd := &wcli.Command{
+		Use:           "app",
+		ErrWriter:     &errBuf,
+		SilenceErrors: true,
+		Run: func(ctx *wcli.Context) error {
+			return fmt.Errorf("boom")
+		},
+	}
+
+	err := cmd.Execute(nil)
+	if err == nil {
+		t.Fatal("에러가 반환되어야 함")
+	}
+	if errBuf.Len() != 0 {
+		t.Fatalf("SilenceErrors=true이면 ErrWriter 출력이 없어야 함: %q", errBuf.String())
+	}
+}

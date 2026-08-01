@@ -16,6 +16,14 @@ import (
 // wcliCommandsMarker wcli add 가 커맨드를 자동 주입할 때 사용하는 마커 주석
 const wcliCommandsMarker = "// wcli:commands"
 
+var (
+	getwdFunc     = os.Getwd
+	statFileFunc  = os.Stat
+	openFileFunc  = os.Open
+	readFileFunc  = os.ReadFile
+	writeFileFunc = os.WriteFile
+)
+
 type initData struct {
 	ModuleName  string
 	LibraryPath string
@@ -77,7 +85,7 @@ func buildInitCmd() *wcli.Command {
 
 			// 절대 경로가 들어온 경우 현재 디렉토리 기준 상대 경로로 변환
 			if filepath.IsAbs(resolvedPath) {
-				wd, err := os.Getwd()
+				wd, err := getwdFunc()
 				if err != nil {
 					return fmt.Errorf("현재 디렉토리 획득 실패: %w", err)
 				}
@@ -125,7 +133,7 @@ func buildInitCmd() *wcli.Command {
 
 // detectWcliPath .gitmodules 파일을 파싱해 wcli submodule의 상대 경로를 반환합니다.
 func detectWcliPath(dir string) (string, error) {
-	f, err := os.Open(filepath.Join(dir, ".gitmodules"))
+	f, err := openFileFunc(filepath.Join(dir, ".gitmodules"))
 	if err != nil {
 		return "", fmt.Errorf(".gitmodules 파일을 열 수 없습니다: %w", err)
 	}
@@ -199,7 +207,7 @@ func buildAddCmd() *wcli.Command {
 			fileName := cmdName + ".go"
 
 			// main.go 유무 체크하여 wcli 프로젝트인지 검증
-			if _, err := os.Stat("main.go"); os.IsNotExist(err) {
+			if _, err := statFileFunc("main.go"); os.IsNotExist(err) {
 				return fmt.Errorf("wcli 프로젝트의 루트 디렉토리가 아닙니다 (main.go가 존재하지 않습니다)")
 			}
 
@@ -235,7 +243,7 @@ func buildAddCmd() *wcli.Command {
 
 func renderToFile(fileName, tmplStr string, data interface{}) error {
 	// 이미 파일이 존재하는지 체크
-	if _, err := os.Stat(fileName); err == nil {
+	if _, err := statFileFunc(fileName); err == nil {
 		return fmt.Errorf("파일이 이미 존재합니다: %s", fileName)
 	}
 
@@ -249,7 +257,7 @@ func renderToFile(fileName, tmplStr string, data interface{}) error {
 		return fmt.Errorf("템플릿 실행 에러: %w", err)
 	}
 
-	if err := os.WriteFile(fileName, buf.Bytes(), 0644); err != nil {
+	if err := writeFileFunc(fileName, buf.Bytes(), 0644); err != nil {
 		return fmt.Errorf("파일 기록 에러: %w", err)
 	}
 
@@ -258,7 +266,7 @@ func renderToFile(fileName, tmplStr string, data interface{}) error {
 }
 
 func injectCommandToMain(structName string) error {
-	content, err := os.ReadFile("main.go")
+	content, err := readFileFunc("main.go")
 	if err != nil {
 		return err
 	}
@@ -272,7 +280,7 @@ func injectCommandToMain(structName string) error {
 	bindingCode := wcliCommandsMarker + "\n\trootCmd.AddCommand(" + structName + ")"
 	newMainStr := strings.Replace(mainStr, wcliCommandsMarker, bindingCode, 1)
 
-	return os.WriteFile("main.go", []byte(newMainStr), 0644)
+	return writeFileFunc("main.go", []byte(newMainStr), 0644)
 }
 
 // checkResult doctor 점검 결과 항목
@@ -312,7 +320,7 @@ func runDoctor() []checkResult {
 	var results []checkResult
 
 	// 1. main.go 존재 여부
-	if _, err := os.Stat("main.go"); err == nil {
+	if _, err := statFileFunc("main.go"); err == nil {
 		results = append(results, checkResult{"main.go 존재", "ok", "main.go 발견"})
 	} else {
 		results = append(results, checkResult{"main.go 존재", "fail", "main.go 없음 — wcli 프로젝트 루트가 아닌 것 같습니다"})

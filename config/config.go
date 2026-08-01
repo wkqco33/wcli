@@ -25,6 +25,25 @@ var globalConfig = &configStore{
 	data: make(map[string]any),
 }
 
+var (
+	lookupEnvFunc   = os.LookupEnv
+	userHomeDirFunc = os.UserHomeDir
+	readFileFunc    = os.ReadFile
+	statFunc        = os.Stat
+)
+
+// Reset 전역 설정 상태를 초기화합니다.
+// 테스트 격리와 재초기화가 필요한 장기 실행 프로세스에서 사용할 수 있습니다.
+func Reset() {
+	globalConfig.mu.Lock()
+	defer globalConfig.mu.Unlock()
+	globalConfig.configPath = ""
+	globalConfig.configType = ""
+	globalConfig.data = make(map[string]any)
+	globalConfig.autoEnv = false
+	globalConfig.envPrefix = ""
+}
+
 // SetConfigFile 설정 파일 경로를 지정합니다.
 func SetConfigFile(path string) {
 	globalConfig.mu.Lock()
@@ -77,7 +96,7 @@ func ReadInConfig() error {
 		return fmt.Errorf("config file path is not set")
 	}
 
-	content, err := os.ReadFile(globalConfig.configPath)
+	content, err := readFileFunc(globalConfig.configPath)
 	if err != nil {
 		return fmt.Errorf("read config file error: %w", err)
 	}
@@ -123,7 +142,7 @@ func Get(key string) any {
 		if globalConfig.envPrefix != "" {
 			envKey = globalConfig.envPrefix + "_" + envKey
 		}
-		if envVal, exists := os.LookupEnv(envKey); exists {
+		if envVal, exists := lookupEnvFunc(envKey); exists {
 			return envVal
 		}
 	}
@@ -252,7 +271,6 @@ func GetStringSlice(key string) []string {
 	}
 	return []string{fmt.Sprintf("%v", val)}
 }
-
 
 // Set 설정 맵에 계층형 점 표기법으로 값을 설정합니다.
 func Set(key string, value any) {
@@ -498,7 +516,7 @@ func AutoDiscoverConfig(appName string, extraPaths ...string) error {
 	}
 
 	// 3. ~/.appname.*
-	if home, err := os.UserHomeDir(); err == nil {
+	if home, err := userHomeDirFunc(); err == nil {
 		for _, ext := range configExtensions {
 			candidates = append(candidates, filepath.Join(home, "."+appName+ext))
 		}
@@ -510,7 +528,7 @@ func AutoDiscoverConfig(appName string, extraPaths ...string) error {
 	}
 
 	for _, path := range candidates {
-		if _, err := os.Stat(path); err == nil {
+		if _, err := statFunc(path); err == nil {
 			SetConfigFile(path)
 			return ReadInConfig()
 		}

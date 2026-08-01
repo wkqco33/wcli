@@ -6,6 +6,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 )
 
 func TestDefaultLogger(t *testing.T) {
@@ -135,4 +136,20 @@ func TestGlobalLoggerConcurrentAccess(t *testing.T) {
 		}(i)
 	}
 	wg.Wait()
+}
+
+func TestDefaultLoggerUsesInjectableClock(t *testing.T) {
+	oldNow := nowFunc
+	nowFunc = func() time.Time {
+		return time.Date(2026, 8, 1, 10, 0, 0, 0, time.UTC)
+	}
+	defer func() { nowFunc = oldNow }()
+
+	var buf bytes.Buffer
+	logger := NewDefaultLogger(&buf, LevelInfo, false)
+	logger.Log(LevelInfo, "clock test")
+
+	if !strings.Contains(buf.String(), "2026-08-01 10:00:00 [INFO] clock test") {
+		t.Fatalf("고정 시계가 반영되어야 함: %q", buf.String())
+	}
 }

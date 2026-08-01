@@ -12,6 +12,7 @@ import (
 // --- 글로벌 config store 테스트 (SetConfigFile / ReadInConfig / Get) ---
 
 func TestJSONConfig(t *testing.T) {
+	resetConfigState(t)
 	jsonContent := `{
 		"app": {
 			"name": "testapp",
@@ -61,6 +62,7 @@ func TestJSONConfig(t *testing.T) {
 }
 
 func TestINIConfig(t *testing.T) {
+	resetConfigState(t)
 	iniContent := `
 # 글로벌 코멘트
 database = postgresql
@@ -110,6 +112,7 @@ ssl = "false"
 }
 
 func TestYAMLConfig(t *testing.T) {
+	resetConfigState(t)
 	yamlContent := `
 app:
   name: testapp
@@ -144,6 +147,7 @@ database: postgresql
 }
 
 func TestTOMLConfig(t *testing.T) {
+	resetConfigState(t)
 	tomlContent := `
 database = "postgresql"
 
@@ -176,6 +180,7 @@ port = "8080"
 }
 
 func TestDotEnvConfig(t *testing.T) {
+	resetConfigState(t)
 	envContent := `
 # 환경 설정
 DATABASE=postgresql
@@ -207,6 +212,7 @@ APP_PORT=8080
 }
 
 func TestTOMLNestedSection(t *testing.T) {
+	resetConfigState(t)
 	tomlContent := `
 [server]
 host = "localhost"
@@ -244,6 +250,7 @@ key = "/etc/ssl/key.pem"
 }
 
 func TestAutoDiscoverConfig_Found(t *testing.T) {
+	resetConfigState(t)
 	dir := t.TempDir()
 	cfgPath := dir + "/config.json"
 	os.WriteFile(cfgPath, []byte(`{"key":"value"}`), 0644)
@@ -258,6 +265,7 @@ func TestAutoDiscoverConfig_Found(t *testing.T) {
 }
 
 func TestAutoDiscoverConfig_NotFound(t *testing.T) {
+	resetConfigState(t)
 	err := config.AutoDiscoverConfig("nonexistent_app_xyz123")
 	if err == nil {
 		t.Error("파일이 없을 때 에러 기대")
@@ -265,6 +273,7 @@ func TestAutoDiscoverConfig_NotFound(t *testing.T) {
 }
 
 func TestTypedGetHelpers(t *testing.T) {
+	resetConfigState(t)
 	config.Set("test.str", "hello")
 	config.Set("test.int_str", "123")
 	config.Set("test.int_raw", 456)
@@ -295,7 +304,7 @@ func TestTypedGetHelpers(t *testing.T) {
 	if config.GetDuration("test.duration_str") != 5*time.Second {
 		t.Errorf("GetDuration 실패: %v", config.GetDuration("test.duration_str"))
 	}
-	
+
 	slice := config.GetStringSlice("test.slice_str")
 	expectedSlice := []string{"a", "b", "c"}
 	if !reflect.DeepEqual(slice, expectedSlice) {
@@ -304,8 +313,9 @@ func TestTypedGetHelpers(t *testing.T) {
 }
 
 func TestAutomaticEnv(t *testing.T) {
+	resetConfigState(t)
 	config.AutomaticEnv()
-	
+
 	// 1. 환경변수 미설정 시 기존 세팅값
 	config.Set("database.port", 3306)
 	if config.GetInt("database.port") != 3306 {
@@ -330,6 +340,7 @@ func TestAutomaticEnv(t *testing.T) {
 }
 
 func TestReloadConfig(t *testing.T) {
+	resetConfigState(t)
 	tmpFile, err := os.CreateTemp("", "config-reload-*.json")
 	if err != nil {
 		t.Fatalf("임시 파일 생성 실패: %v", err)
@@ -364,5 +375,35 @@ func TestReloadConfig(t *testing.T) {
 
 	if config.GetString("key") != "value2" {
 		t.Errorf("리로드 후 변경값 로드 실패: %s", config.GetString("key"))
+	}
+}
+
+func TestSetDefaultDoesNotOverrideExisting(t *testing.T) {
+	resetConfigState(t)
+
+	config.Set("app.port", 8080)
+	config.SetDefault("app.port", 9090)
+
+	if got := config.GetInt("app.port"); got != 8080 {
+		t.Fatalf("SetDefault는 기존 값을 덮어쓰면 안 됨: %d", got)
+	}
+}
+
+func TestResetClearsGlobalState(t *testing.T) {
+	resetConfigState(t)
+
+	config.Set("app.name", "from-store")
+	config.SetEnvPrefix("APP")
+	config.AutomaticEnv()
+	t.Setenv("APP_APP_NAME", "from-env")
+
+	if got := config.Get("app.name"); got != "from-env" {
+		t.Fatalf("Reset 전 env 우선순위가 적용되어야 함: %v", got)
+	}
+
+	config.Reset()
+
+	if got := config.Get("app.name"); got != nil {
+		t.Fatalf("Reset 후 저장된 값이 남아 있으면 안 됨: %v", got)
 	}
 }

@@ -63,6 +63,8 @@ type DefaultLogger struct {
 	UseMarkup bool
 }
 
+var nowFunc = time.Now
+
 // NewDefaultLogger 새 DefaultLogger 인스턴스를 생성합니다.
 func NewDefaultLogger(w io.Writer, minLevel LogLevel, useMarkup bool) *DefaultLogger {
 	return &DefaultLogger{
@@ -78,7 +80,7 @@ func (l *DefaultLogger) Log(level LogLevel, format string, args ...any) {
 		return
 	}
 
-	timeStr := time.Now().Format("2006-01-02 15:04:05")
+	timeStr := nowFunc().Format("2006-01-02 15:04:05")
 	var msg string
 	if len(args) > 0 {
 		msg = fmt.Sprintf(format, args...)

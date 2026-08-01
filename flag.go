@@ -11,6 +11,8 @@ import (
 	"github.com/seoyc/wcli/config"
 )
 
+var lookupEnv = os.LookupEnv
+
 // FlagType 플래그 값의 타입을 정의
 type FlagType int
 
@@ -152,7 +154,7 @@ func (f *FlagSet) Validate() error {
 
 		// (1) 환경변수 바인딩 검사 및 설정
 		if flag.envName != "" {
-			if val, exists := os.LookupEnv(flag.envName); exists {
+			if val, exists := lookupEnv(flag.envName); exists {
 				if err := f.setFlagValue(flag, val, fmt.Sprintf("env %s", flag.envName)); err != nil {
 					return err
 				}
