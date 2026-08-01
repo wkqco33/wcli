@@ -110,3 +110,71 @@ func TestFlagGroupNoteInHelp(t *testing.T) {
 		t.Errorf("플래그 이름이 출력에 없음: %q", out)
 	}
 }
+
+func TestCategorizedLocalFlagsInHelp(t *testing.T) {
+	cmd := &wcli.Command{Use: "app", Short: "테스트"}
+	var host, token string
+	var verbose bool
+
+	cmd.Flags().StringVar(&host, "host", "H", "localhost", "대상 호스트")
+	cmd.Flags().StringVar(&token, "token", "t", "", "인증 토큰")
+	cmd.Flags().BoolVar(&verbose, "verbose", "v", false, "상세 출력")
+
+	if err := cmd.Flags().SetCategory("host", "연결"); err != nil {
+		t.Fatalf("host 카테고리 설정 실패: %v", err)
+	}
+	if err := cmd.Flags().SetCategory("token", "인증"); err != nil {
+		t.Fatalf("token 카테고리 설정 실패: %v", err)
+	}
+
+	var buf bytes.Buffer
+	cmd.OutWriter = &buf
+	cmd.Help()
+	out := buf.String()
+
+	if !strings.Contains(out, "Flags:") {
+		t.Fatalf("'Flags:' 섹션이 출력에 없음: %q", out)
+	}
+	if !strings.Contains(out, "연결:") || !strings.Contains(out, "인증:") {
+		t.Fatalf("카테고리 헤더가 출력에 없음: %q", out)
+	}
+	if !strings.Contains(out, "host") || !strings.Contains(out, "token") || !strings.Contains(out, "verbose") {
+		t.Fatalf("카테고리 플래그 출력 누락: %q", out)
+	}
+
+	if strings.Index(out, "verbose") > strings.Index(out, "연결:") {
+		t.Fatalf("카테고리 없는 플래그는 카테고리 헤더보다 먼저 출력되어야 함: %q", out)
+	}
+}
+
+func TestCategorizedGlobalFlagsInHelp(t *testing.T) {
+	root := &wcli.Command{Use: "app", Short: "테스트 앱"}
+	child := &wcli.Command{Use: "serve", Short: "서버 실행"}
+	root.AddCommand(child)
+
+	var configPath, profile string
+	root.PersistentFlags().StringVar(&configPath, "config", "c", "", "설정 파일 경로")
+	root.PersistentFlags().StringVar(&profile, "profile", "p", "default", "실행 프로필")
+
+	if err := root.PersistentFlags().SetCategory("config", "입력"); err != nil {
+		t.Fatalf("config 카테고리 설정 실패: %v", err)
+	}
+	if err := root.PersistentFlags().SetCategory("profile", "실행"); err != nil {
+		t.Fatalf("profile 카테고리 설정 실패: %v", err)
+	}
+
+	var buf bytes.Buffer
+	child.OutWriter = &buf
+	child.Help()
+	out := buf.String()
+
+	if !strings.Contains(out, "Global Flags:") {
+		t.Fatalf("'Global Flags:' 섹션이 출력에 없음: %q", out)
+	}
+	if !strings.Contains(out, "입력:") || !strings.Contains(out, "실행:") {
+		t.Fatalf("글로벌 플래그 카테고리 헤더가 출력에 없음: %q", out)
+	}
+	if !strings.Contains(out, "config") || !strings.Contains(out, "profile") {
+		t.Fatalf("글로벌 플래그 출력 누락: %q", out)
+	}
+}
