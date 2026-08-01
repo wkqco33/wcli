@@ -254,9 +254,9 @@ func TestLoadArrayBindingAcrossFormats(t *testing.T) {
 			expectedEmpty: []string{},
 		},
 		{
-			name:    "yaml",
-			path:    "test_array.yaml",
-			content: "ips:\n  - 127.0.0.1\n  - 10.0.0.1\nports: [80, 443]\nempty: []\n",
+			name:          "yaml",
+			path:          "test_array.yaml",
+			content:       "ips:\n  - 127.0.0.1\n  - 10.0.0.1\nports: [80, 443]\nempty: []\n",
 			expectedIPs:   []string{"127.0.0.1", "10.0.0.1"},
 			expectedPorts: []int{80, 443},
 			expectedEmpty: []string{},
