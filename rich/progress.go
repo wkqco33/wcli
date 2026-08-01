@@ -24,6 +24,8 @@ var (
 	ThemeStar       = ProgressTheme{Fill: "★", Empty: "☆"}
 )
 
+var nowFunc = time.Now
+
 // ProgressBar 진행률을 시각적으로 표시하는 구조체입니다.
 type ProgressBar struct {
 	Total       int       // 전체 단계 수
@@ -61,7 +63,7 @@ func (p *ProgressBar) SetTheme(theme ProgressTheme) {
 
 // Start 프로그레스바 타이머를 시작합니다. ETA 계산에 필요합니다.
 func (p *ProgressBar) Start() {
-	p.startTime = time.Now()
+	p.startTime = nowFunc()
 }
 
 // calculateETA 남은 예상 시간을 계산합니다.
