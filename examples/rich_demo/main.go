@@ -68,7 +68,7 @@ func main() {
 			pb.Print(i)
 			time.Sleep(200 * time.Millisecond)
 		}
-		fmt.Println("\n")
+		fmt.Println()
 	}
 
 	rich.Println("[bold][green]🎉 데모 시연이 끝났습니다![/green][/bold]")

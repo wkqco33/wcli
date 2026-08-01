@@ -71,12 +71,12 @@ func (p *ProgressBar) calculateETA(current int) string {
 	if p.startTime.IsZero() || current <= 0 || current >= p.Total {
 		return ""
 	}
-	elapsed := time.Since(p.startTime)
+	elapsed := nowFunc().Sub(p.startTime)
 	pct := float64(current) / float64(p.Total)
-	
+
 	totalTime := time.Duration(float64(elapsed) / pct)
 	eta := totalTime - elapsed
-	
+
 	seconds := int(eta.Seconds())
 	if seconds < 0 {
 		seconds = 0

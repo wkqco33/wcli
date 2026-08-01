@@ -17,10 +17,10 @@ import (
 const wcliCommandsMarker = "// wcli:commands"
 
 var (
-	getwdFunc    = os.Getwd
-	statFileFunc = os.Stat
-	openFileFunc = os.Open
-	readFileFunc = os.ReadFile
+	getwdFunc     = os.Getwd
+	statFileFunc  = os.Stat
+	openFileFunc  = os.Open
+	readFileFunc  = os.ReadFile
 	writeFileFunc = os.WriteFile
 )
 
