@@ -14,6 +14,12 @@ import (
 // durationType time.Duration 타입 비교를 위한 전역 캐시 (setFieldValue에서 반복 생성 방지)
 var durationType = reflect.TypeOf(time.Duration(0))
 
+var (
+	environFunc   = os.Environ
+	openFileFunc  = os.Open
+	lookupEnvBind = os.LookupEnv
+)
+
 // SourceType 설정 소스 유형
 type SourceType int
 
@@ -183,7 +189,7 @@ func loadBindSource(src configSource) (map[string]any, error) {
 
 func loadSystemEnv() (map[string]any, error) {
 	data := make(map[string]any)
-	for _, env := range os.Environ() {
+	for _, env := range environFunc() {
 		pair := strings.SplitN(env, "=", 2)
 		if len(pair) == 2 {
 			data[pair[0]] = pair[1]
@@ -193,7 +199,7 @@ func loadSystemEnv() (map[string]any, error) {
 }
 
 func loadDotEnvFile(path string) (map[string]any, error) {
-	file, err := os.Open(path)
+	file, err := openFileFunc(path)
 	if err != nil {
 		return nil, err
 	}
@@ -261,7 +267,7 @@ func bindStruct(structVal reflect.Value, data map[string]any, rootData map[strin
 		rawValue, exists = data[strings.ToLower(tag)]
 
 		// 2. 시스템 환경변수가 있으면 최우선 적용 (파일 데이터를 덮어씀)
-		if envVal, envExists := os.LookupEnv(strings.ToUpper(fullKey)); envExists {
+		if envVal, envExists := lookupEnvBind(strings.ToUpper(fullKey)); envExists {
 			rawValue = envVal
 			exists = true
 		}

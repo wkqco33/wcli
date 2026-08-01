@@ -21,6 +21,7 @@ type testBindConfig struct {
 }
 
 func TestLoadDotEnvAndYAML(t *testing.T) {
+	resetConfigState(t)
 	dotenvContent := "PORT=9090\nDATABASE_USER=admin\n"
 	if err := os.WriteFile(".test_bind.env", []byte(dotenvContent), 0644); err != nil {
 		t.Fatal(err)
@@ -62,6 +63,7 @@ func TestLoadDotEnvAndYAML(t *testing.T) {
 }
 
 func TestLoadTOML(t *testing.T) {
+	resetConfigState(t)
 	tomlContent := "PORT = 8888\n[DATABASE]\nUSER = \"root\"\n"
 	if err := os.WriteFile("test_bind.toml", []byte(tomlContent), 0644); err != nil {
 		t.Fatal(err)
@@ -82,6 +84,7 @@ func TestLoadTOML(t *testing.T) {
 }
 
 func TestLoadEnvWithPrefix(t *testing.T) {
+	resetConfigState(t)
 	os.Setenv("WCLI_TEST_PORT", "1234")
 	os.Setenv("WCLI_TEST_DATABASE_USER", "env_user")
 	defer os.Unsetenv("WCLI_TEST_PORT")
@@ -108,6 +111,7 @@ func TestLoadEnvWithPrefix(t *testing.T) {
 }
 
 func TestWriteDefault(t *testing.T) {
+	resetConfigState(t)
 	type defaultCfg struct {
 		Name string `wcli:"NAME" default:"myapp"`
 		Port int    `wcli:"PORT" default:"9000"`
@@ -132,6 +136,7 @@ func TestWriteDefault(t *testing.T) {
 }
 
 func TestLoad_NilTarget(t *testing.T) {
+	resetConfigState(t)
 	err := config.Load(nil)
 	if err == nil {
 		t.Fatal("nil target에서 에러가 발생해야 합니다")
@@ -139,6 +144,7 @@ func TestLoad_NilTarget(t *testing.T) {
 }
 
 func TestLoad_NonPointer(t *testing.T) {
+	resetConfigState(t)
 	type cfg struct{ Port int }
 	err := config.Load(cfg{})
 	if err == nil {
@@ -147,6 +153,7 @@ func TestLoad_NonPointer(t *testing.T) {
 }
 
 func TestLoadPointer(t *testing.T) {
+	resetConfigState(t)
 	yamlContent := "PORT: 9090\nTEMP: 0.85\nSTOP: AI assistant\n"
 	if err := os.WriteFile("test_pointer.yaml", []byte(yamlContent), 0644); err != nil {
 		t.Fatal(err)
@@ -180,6 +187,7 @@ func TestLoadPointer(t *testing.T) {
 }
 
 func TestLoadCaseInsensitivity(t *testing.T) {
+	resetConfigState(t)
 	yamlContent := "host: case.example.com\ndebug: false\ndatabase:\n  pass: my-secret-key\n"
 	if err := os.WriteFile("test_case.yaml", []byte(yamlContent), 0644); err != nil {
 		t.Fatal(err)
@@ -200,6 +208,7 @@ func TestLoadCaseInsensitivity(t *testing.T) {
 }
 
 func TestLoadSliceBinding(t *testing.T) {
+	resetConfigState(t)
 	yamlContent := "ips: 127.0.0.1, 10.0.0.1, 192.168.0.1\nports: 80, 443, 8080\n"
 	if err := os.WriteFile("test_slice.yaml", []byte(yamlContent), 0644); err != nil {
 		t.Fatal(err)
@@ -231,6 +240,7 @@ func TestLoadSliceBinding(t *testing.T) {
 // 삼키지 않고 실제로 반환하는지 확인합니다(loadBindSource 내부의 err 변수
 // 섀도잉으로 파싱 에러가 무시되던 회귀를 방지).
 func TestLoadYAMLParseErrorPropagates(t *testing.T) {
+	resetConfigState(t)
 	// bufio.Scanner의 기본 토큰 한도(약 64KB)를 넘는 한 줄을 만들어
 	// parseYAMLContent가 scanner.Err()로 실제 에러를 반환하도록 강제한다.
 	tooLong := "name: " + strings.Repeat("x", 70000) + "\n"

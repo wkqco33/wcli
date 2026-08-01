@@ -238,6 +238,64 @@ func TestBuildAddCmd(t *testing.T) {
 	}
 }
 
+func TestRenderToFile_ExistingFile(t *testing.T) {
+	_, cleanup := setupTmpDir(t)
+	defer cleanup()
+
+	if err := os.WriteFile("go.mod", []byte("existing"), 0644); err != nil {
+		t.Fatalf("기존 파일 생성 실패: %v", err)
+	}
+
+	if err := renderToFile("go.mod", GoModTemplate, initData{ModuleName: "app"}); err == nil {
+		t.Fatal("기존 파일이 있으면 에러가 발생해야 함")
+	}
+}
+
+func TestInjectCommandToMain_MissingMarker(t *testing.T) {
+	_, cleanup := setupTmpDir(t)
+	defer cleanup()
+
+	if err := os.WriteFile("main.go", []byte("package main\nfunc main(){}\n"), 0644); err != nil {
+		t.Fatalf("main.go 기록 실패: %v", err)
+	}
+
+	if err := injectCommandToMain("CreateCmd"); err == nil {
+		t.Fatal("마커가 없으면 에러가 발생해야 함")
+	}
+}
+
+func TestBuildAddCmd_NonProjectRoot(t *testing.T) {
+	_, cleanup := setupTmpDir(t)
+	defer cleanup()
+
+	if err := buildAddCmd().Execute([]string{"create"}); err == nil {
+		t.Fatal("main.go가 없으면 wcli 프로젝트 루트가 아니라는 에러가 필요함")
+	}
+}
+
+func TestBuildInitCmd_AbsoluteLibPathBecomesRelative(t *testing.T) {
+	tmpDir, cleanup := setupTmpDir(t)
+	defer cleanup()
+
+	libDir := filepath.Join(tmpDir, "vendor", "wcli")
+	if err := os.MkdirAll(libDir, 0755); err != nil {
+		t.Fatalf("lib 디렉토리 생성 실패: %v", err)
+	}
+
+	cmd := buildInitCmd()
+	if err := cmd.Execute([]string{"--lib-path", libDir, "myorg/myapp"}); err != nil {
+		t.Fatalf("init 실행 실패: %v", err)
+	}
+
+	goModContent, err := os.ReadFile("go.mod")
+	if err != nil {
+		t.Fatalf("go.mod 읽기 실패: %v", err)
+	}
+	if !strings.Contains(string(goModContent), "=> ./vendor/wcli") {
+		t.Fatalf("절대 경로 lib-path는 현재 디렉토리 기준 상대 경로로 저장되어야 함: %q", string(goModContent))
+	}
+}
+
 // TestBuildDoctorCmd doctor 커맨드의 Run이 에러 없이 동작하는지 검증한다.
 func TestBuildDoctorCmd(t *testing.T) {
 	_, cleanup := setupTmpDir(t)
