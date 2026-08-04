@@ -2,6 +2,7 @@ package wcli_test
 
 import (
 	"os"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -246,6 +247,77 @@ func TestFlagPriorityChain(t *testing.T) {
 	_ = fs.Validate()
 	if host != "cli-host" {
 		t.Errorf("CLI 플래그 최우선 적용 실패: 예상 cli-host, 실제 %q", host)
+	}
+}
+
+func TestBindConfigStringSliceAcrossFormats(t *testing.T) {
+	tests := []struct {
+		name     string
+		ext      string
+		content  string
+		expected []string
+	}{
+		{
+			name:     "json",
+			ext:      ".json",
+			content:  `{"server":{"tags":["blue","green"]}}`,
+			expected: []string{"blue", "green"},
+		},
+		{
+			name: "yaml",
+			ext:  ".yaml",
+			content: "server:\n" +
+				"  tags:\n" +
+				"    - blue\n" +
+				"    - green\n",
+			expected: []string{"blue", "green"},
+		},
+		{
+			name:     "toml",
+			ext:      ".toml",
+			content:  "[server]\ntags = [\"blue\", \"green\"]\n",
+			expected: []string{"blue", "green"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			config.Reset()
+			tmpFile, err := os.CreateTemp("", "flag-config-*"+tt.ext)
+			if err != nil {
+				t.Fatalf("임시 파일 생성 실패: %v", err)
+			}
+			defer os.Remove(tmpFile.Name())
+			if _, err := tmpFile.Write([]byte(tt.content)); err != nil {
+				t.Fatalf("임시 파일 쓰기 실패: %v", err)
+			}
+			tmpFile.Close()
+
+			config.SetConfigFile(tmpFile.Name())
+			if tt.ext == ".json" {
+				config.SetConfigType("json")
+			}
+			if err := config.ReadInConfig(); err != nil {
+				t.Fatalf("ReadInConfig 실패: %v", err)
+			}
+
+			tags := []string{"default"}
+			fs := wcli.NewFlagSet()
+			fs.StringSliceVar(&tags, "tag", "", []string{"default"}, "태그")
+			if err := fs.BindConfig("tag", "server.tags"); err != nil {
+				t.Fatalf("BindConfig 실패: %v", err)
+			}
+
+			if _, err := fs.Parse(nil); err != nil {
+				t.Fatalf("Parse 실패: %v", err)
+			}
+			if err := fs.Validate(); err != nil {
+				t.Fatalf("Validate 실패: %v", err)
+			}
+			if !reflect.DeepEqual(tags, tt.expected) {
+				t.Fatalf("BindConfig 배열 바인딩 실패: got=%v want=%v", tags, tt.expected)
+			}
+		})
 	}
 }
 

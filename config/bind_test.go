@@ -236,6 +236,73 @@ func TestLoadSliceBinding(t *testing.T) {
 	}
 }
 
+func TestLoadArrayBindingAcrossFormats(t *testing.T) {
+	tests := []struct {
+		name          string
+		path          string
+		content       string
+		expectedIPs   []string
+		expectedPorts []int
+		expectedEmpty []string
+	}{
+		{
+			name:          "json",
+			path:          "test_array.json",
+			content:       `{"ips":["127.0.0.1","10.0.0.1"],"ports":[80,443],"empty":[]}`,
+			expectedIPs:   []string{"127.0.0.1", "10.0.0.1"},
+			expectedPorts: []int{80, 443},
+			expectedEmpty: []string{},
+		},
+		{
+			name:          "yaml",
+			path:          "test_array.yaml",
+			content:       "ips:\n  - 127.0.0.1\n  - 10.0.0.1\nports: [80, 443]\nempty: []\n",
+			expectedIPs:   []string{"127.0.0.1", "10.0.0.1"},
+			expectedPorts: []int{80, 443},
+			expectedEmpty: []string{},
+		},
+		{
+			name:          "toml",
+			path:          "test_array.toml",
+			content:       "ips = [\"127.0.0.1\", \"10.0.0.1\"]\nports = [80, 443]\nempty = []\n",
+			expectedIPs:   []string{"127.0.0.1", "10.0.0.1"},
+			expectedPorts: []int{80, 443},
+			expectedEmpty: []string{},
+		},
+	}
+
+	type arrayCfg struct {
+		IPs   []string `wcli:"IPS"`
+		Ports []int    `wcli:"PORTS"`
+		Empty []string `wcli:"EMPTY"`
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			resetConfigState(t)
+			if err := os.WriteFile(tt.path, []byte(tt.content), 0644); err != nil {
+				t.Fatal(err)
+			}
+			defer os.Remove(tt.path)
+
+			var cfg arrayCfg
+			if err := config.Load(&cfg, config.WithFiles(tt.path)); err != nil {
+				t.Fatalf("Load 실패: %v", err)
+			}
+
+			if !reflect.DeepEqual(cfg.IPs, tt.expectedIPs) {
+				t.Fatalf("IPs 바인딩 실패: got=%v want=%v", cfg.IPs, tt.expectedIPs)
+			}
+			if !reflect.DeepEqual(cfg.Ports, tt.expectedPorts) {
+				t.Fatalf("Ports 바인딩 실패: got=%v want=%v", cfg.Ports, tt.expectedPorts)
+			}
+			if !reflect.DeepEqual(cfg.Empty, tt.expectedEmpty) {
+				t.Fatalf("Empty 바인딩 실패: got=%v want=%v", cfg.Empty, tt.expectedEmpty)
+			}
+		})
+	}
+}
+
 // TestLoadYAMLParseErrorPropagates YAML/TOML 파싱 실패 시 config.Load가 에러를
 // 삼키지 않고 실제로 반환하는지 확인합니다(loadBindSource 내부의 err 변수
 // 섀도잉으로 파싱 에러가 무시되던 회귀를 방지).
