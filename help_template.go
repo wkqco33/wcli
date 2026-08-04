@@ -129,10 +129,11 @@ func getOrCompileTemplate(tmplStr string) (*template.Template, error) {
 			return strings.Join(a, sep)
 		},
 		"pad": func(width int, s string) string {
-			if len(s) >= width {
+			w := rich.DisplayWidth(s)
+			if w >= width {
 				return s
 			}
-			return s + strings.Repeat(" ", width-len(s))
+			return s + strings.Repeat(" ", width-w)
 		},
 		"cleanUse": func(use string) string {
 			// use 문자열의 첫 공백 이전 토큰만 추출
