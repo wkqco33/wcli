@@ -185,14 +185,7 @@ func (f *FlagSet) Validate() error {
 		// (2) 설정파일 바인딩 검사 및 설정
 		if flag.configKey != "" {
 			if val := config.Get(flag.configKey); val != nil {
-				var valStr string
-				switch v := val.(type) {
-				case string:
-					valStr = v
-				default:
-					valStr = fmt.Sprintf("%v", v)
-				}
-				if err := f.setFlagValue(flag, valStr, fmt.Sprintf("config %s", flag.configKey)); err != nil {
+				if err := f.setConfigFlagValue(flag, val, fmt.Sprintf("config %s", flag.configKey)); err != nil {
 					return err
 				}
 			}
@@ -508,6 +501,44 @@ func (f *FlagSet) setFlagValue(flag *Flag, val string, flagArg string) error {
 		*flag.valueStringSlice = append(*flag.valueStringSlice, val)
 	}
 	return nil
+}
+
+func (f *FlagSet) setConfigFlagValue(flag *Flag, val any, flagArg string) error {
+	if flag.Type != TypeStringSlice {
+		return f.setFlagValue(flag, fmt.Sprintf("%v", val), flagArg)
+	}
+
+	flag.wasSet = true
+	items := configValueToStringSlice(val)
+	*flag.valueStringSlice = append((*flag.valueStringSlice)[:0], items...)
+	return nil
+}
+
+func configValueToStringSlice(val any) []string {
+	switch v := val.(type) {
+	case nil:
+		return nil
+	case []string:
+		return append([]string(nil), v...)
+	case []any:
+		items := make([]string, len(v))
+		for i, item := range v {
+			items[i] = fmt.Sprintf("%v", item)
+		}
+		return items
+	case string:
+		parts := strings.Split(v, ",")
+		items := make([]string, 0, len(parts))
+		for _, part := range parts {
+			trimmed := strings.TrimSpace(part)
+			if trimmed != "" {
+				items = append(items, trimmed)
+			}
+		}
+		return items
+	default:
+		return []string{fmt.Sprintf("%v", val)}
+	}
 }
 
 // stringVal 플래그의 현재 값을 문자열로 반환합니다 (검증 콜백용).

@@ -391,6 +391,13 @@ func parseINIContent(content string) (map[string]any, error) {
 func parseYAMLContent(content string) (map[string]any, error) {
 	data := make(map[string]any)
 	scanner := bufio.NewScanner(strings.NewReader(content))
+	var lines []string
+	for scanner.Scan() {
+		lines = append(lines, scanner.Text())
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, err
+	}
 
 	type stackItem struct {
 		indent int
@@ -398,36 +405,72 @@ func parseYAMLContent(content string) (map[string]any, error) {
 	}
 	stack := []stackItem{{indent: -1, m: data}}
 
-	for scanner.Scan() {
-		line := scanner.Text()
+	for i := 0; i < len(lines); i++ {
+		line := lines[i]
 		trimmed := strings.TrimSpace(line)
 		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
 			continue
 		}
 
-		indent := len(line) - len(strings.TrimLeft(line, " "))
+		indent := countLeadingSpaces(line)
 		for len(stack) > 1 && stack[len(stack)-1].indent >= indent {
 			stack = stack[:len(stack)-1]
 		}
 
 		pair := strings.SplitN(trimmed, ":", 2)
-		if len(pair) < 1 {
+		if len(pair) != 2 {
 			continue
 		}
 
 		key := strings.TrimSpace(pair[0])
-		if len(pair) == 2 && strings.TrimSpace(pair[1]) != "" {
-			val := strings.TrimSpace(pair[1])
-			val = strings.Trim(val, `"'`)
-			stack[len(stack)-1].m[key] = val
-		} else {
-			newMap := make(map[string]any)
-			stack[len(stack)-1].m[key] = newMap
-			stack = append(stack, stackItem{indent: indent, m: newMap})
+		val := strings.TrimSpace(pair[1])
+		if val != "" {
+			parsed, err := parseConfigScalarOrArray(val)
+			if err != nil {
+				return nil, err
+			}
+			stack[len(stack)-1].m[key] = parsed
+			continue
 		}
+
+		nextTrimmed, nextIndent, found := nextYAMLSignificantLine(lines, i+1)
+		if found && nextIndent > indent && strings.HasPrefix(nextTrimmed, "- ") {
+			items := make([]any, 0)
+			for j := i + 1; j < len(lines); j++ {
+				listLine := lines[j]
+				listTrimmed := strings.TrimSpace(listLine)
+				if listTrimmed == "" || strings.HasPrefix(listTrimmed, "#") {
+					continue
+				}
+
+				listIndent := countLeadingSpaces(listLine)
+				if listIndent <= indent {
+					i = j - 1
+					break
+				}
+				if !strings.HasPrefix(listTrimmed, "- ") {
+					i = j - 1
+					break
+				}
+
+				itemVal := strings.TrimSpace(strings.TrimPrefix(listTrimmed, "- "))
+				parsed, err := parseConfigScalarOrArray(itemVal)
+				if err != nil {
+					return nil, err
+				}
+				items = append(items, parsed)
+				i = j
+			}
+			stack[len(stack)-1].m[key] = items
+			continue
+		}
+
+		newMap := make(map[string]any)
+		stack[len(stack)-1].m[key] = newMap
+		stack = append(stack, stackItem{indent: indent, m: newMap})
 	}
 
-	return data, scanner.Err()
+	return data, nil
 }
 
 func parseTOMLContent(content string) (map[string]any, error) {
@@ -452,8 +495,11 @@ func parseTOMLContent(content string) (map[string]any, error) {
 		if len(parts) == 2 {
 			key := strings.TrimSpace(parts[0])
 			val := strings.TrimSpace(parts[1])
-			val = strings.Trim(val, `"'`)
-			currentMap[key] = val
+			parsed, err := parseConfigScalarOrArray(val)
+			if err != nil {
+				return nil, err
+			}
+			currentMap[key] = parsed
 		}
 	}
 
@@ -496,6 +542,75 @@ func parseDotEnvContent(content string) (map[string]any, error) {
 	}
 
 	return data, scanner.Err()
+}
+
+func parseConfigScalarOrArray(val string) (any, error) {
+	val = strings.TrimSpace(val)
+	if strings.HasPrefix(val, "[") && strings.HasSuffix(val, "]") {
+		return parseInlineArray(val)
+	}
+	return strings.Trim(val, `"'`), nil
+}
+
+func parseInlineArray(val string) ([]any, error) {
+	inner := strings.TrimSpace(strings.TrimSuffix(strings.TrimPrefix(val, "["), "]"))
+	if inner == "" {
+		return []any{}, nil
+	}
+
+	parts := splitInlineArrayItems(inner)
+	items := make([]any, 0, len(parts))
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		items = append(items, strings.Trim(part, `"'`))
+	}
+	return items, nil
+}
+
+func splitInlineArrayItems(val string) []string {
+	var (
+		items   []string
+		current strings.Builder
+		quote   rune
+	)
+
+	for _, r := range val {
+		switch {
+		case quote != 0:
+			if r == quote {
+				quote = 0
+			}
+			current.WriteRune(r)
+		case r == '\'' || r == '"':
+			quote = r
+			current.WriteRune(r)
+		case r == ',':
+			items = append(items, current.String())
+			current.Reset()
+		default:
+			current.WriteRune(r)
+		}
+	}
+	items = append(items, current.String())
+	return items
+}
+
+func nextYAMLSignificantLine(lines []string, start int) (string, int, bool) {
+	for i := start; i < len(lines); i++ {
+		trimmed := strings.TrimSpace(lines[i])
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+			continue
+		}
+		return trimmed, countLeadingSpaces(lines[i]), true
+	}
+	return "", 0, false
+}
+
+func countLeadingSpaces(line string) int {
+	return len(line) - len(strings.TrimLeft(line, " "))
 }
 
 // configExtensions 지원 설정 파일 확장자 목록 (우선순위 순서)

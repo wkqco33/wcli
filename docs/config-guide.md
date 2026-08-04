@@ -54,7 +54,9 @@ cmd.Flags().MarkFlagsRequiredTogether("user", "password")
 
 > **파서 한계 (의도된 단순화):** YAML/TOML/INI 파서는 표준 라이브러리만으로 구현된 경량 파서입니다.
 > 복잡한 문법은 지원하지 않으니 단순한 키-값 + 중첩 구조 위주로 사용하세요. JSON은 표준 `encoding/json`을 사용하므로 제약이 없습니다.
-> - **미지원:** 배열/리스트(`- item`, `[a, b]`), 멀티라인 값, 앵커/별칭, 인라인 테이블, 값 안의 구분자(예: 따옴표로 감싼 `:`나 `=`)
+> - **지원:** JSON 배열, YAML 리스트(`- item`) / 인라인 배열(`[a, b]`), TOML 배열
+> - **INI/.env 배열형 입력:** 네이티브 배열 문법은 없지만 `a,b,c` 같은 comma-separated 문자열은 `GetStringSlice` / 슬라이스 바인딩에서 사용할 수 있습니다.
+> - **미지원:** 멀티라인 값, YAML 앵커/별칭, TOML 인라인 테이블, 값 안의 구분자(예: 따옴표로 감싼 `:`나 `=`)
 > - YAML 들여쓰기는 **공백만** 지원하며 탭은 인식하지 않습니다.
 > - 모든 스칼라 값은 **문자열**로 로드됩니다(타입 변환은 플래그 바인딩 시점에 수행).
 
@@ -150,7 +152,7 @@ type AppConfig struct {
 var cfg AppConfig
 err := config.Load(&cfg,
     config.WithDotEnv(".env"),          // .env 파일
-    config.WithFiles("config.yaml"),    // YAML 또는 TOML 파일 (대소문자 구분 없이 자동 매칭 지원)
+    config.WithFiles("config.json", "config.yaml"), // JSON/YAML/TOML 파일 (대소문자 구분 없이 자동 매칭 지원)
     config.WithEnv(),                   // 시스템 환경변수 (최우선)
     config.WithPrefix("APP"),           // 환경변수 접두사
 )
