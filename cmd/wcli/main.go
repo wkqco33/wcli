@@ -89,6 +89,12 @@ func buildInitCmd() *wcli.Command {
 				if err != nil {
 					return fmt.Errorf("현재 디렉토리 획득 실패: %w", err)
 				}
+				if realWd, err := filepath.EvalSymlinks(wd); err == nil {
+					wd = realWd
+				}
+				if realPath, err := filepath.EvalSymlinks(resolvedPath); err == nil {
+					resolvedPath = realPath
+				}
 				rel, err := filepath.Rel(wd, resolvedPath)
 				if err != nil {
 					return fmt.Errorf("상대 경로 변환 실패: %w", err)

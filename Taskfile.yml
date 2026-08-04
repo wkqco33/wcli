@@ -2,24 +2,49 @@ version: '3'
 
 vars:
   MODULE: github.com/seoyc/wcli
+  BINARY_NAME: wcli
+  BIN_DIR: ./bin
   GOBIN:
-    sh: echo "$(go env GOPATH)/bin"
+    sh: echo "$(go env GOBIN)" | grep -v '^$' || echo "$(go env GOPATH)/bin"
 
 tasks:
   default:
+    aliases: [help]
     desc: 사용 가능한 태스크 목록 출력
     silent: true
     cmds:
       - task --list
 
-  # --- 개발 ---
+  # --- 개발 및 빌드 ---
 
   build:
-    desc: 패키지 빌드 (컴파일 오류 확인)
+    aliases: [b]
+    desc: 전체 패키지 빌드 (컴파일 오류 확인)
     cmds:
       - go build ./...
 
+  build-bin:
+    desc: 로컬 CLI 바이너리 빌드 (./bin/wcli)
+    sources:
+      - '**/*.go'
+      - go.mod
+      - go.sum
+    generates:
+      - '{{.BIN_DIR}}/{{.BINARY_NAME}}'
+    cmds:
+      - go build -o {{.BIN_DIR}}/{{.BINARY_NAME}} ./cmd/wcli
+      - 'echo "바이너리 빌드 완료: {{.BIN_DIR}}/{{.BINARY_NAME}}"'
+
+  run:
+    desc: 빌드된 로컬 CLI 바이너리 실행
+    deps: [build-bin]
+    cmds:
+      - '{{.BIN_DIR}}/{{.BINARY_NAME}} {{.CLI_ARGS}}'
+
+  # --- 테스트 및 커버리지 ---
+
   test:
+    aliases: [t]
     desc: 전체 테스트 실행
     cmds:
       - go test ./...
@@ -28,6 +53,11 @@ tasks:
     desc: 전체 테스트 실행 (상세 출력)
     cmds:
       - go test -v ./...
+
+  test-race:
+    desc: 전체 테스트 실행 (경쟁 상태 검지기 적용)
+    cmds:
+      - go test -race ./...
 
   bench:
     desc: 벤치마크 실행
@@ -39,27 +69,29 @@ tasks:
     cmds:
       - go test -coverprofile=coverage.out ./...
       - go tool cover -html=coverage.out -o coverage.html
-      - 'echo "커버리지 리포트: coverage.html"'
+      - 'echo "커버리지 리포트 생성 완료: coverage.html"'
 
   cover-pct:
-    desc: 테스트 커버리지 퍼센트 출력
+    desc: 패키지별 테스트 커버리지 퍼센트 출력
     cmds:
       - go test -cover ./...
 
-  # --- 코드 품질 ---
-
-  vet:
-    desc: go vet 정적 분석 실행
+  cover-func:
+    desc: 함수별 커버리지 상세 분석 출력
     cmds:
-      - go vet ./...
+      - go test -coverprofile=coverage.out ./...
+      - go tool cover -func=coverage.out
+
+  # --- 코드 품질 및 린트 ---
 
   fmt:
+    aliases: [f]
     desc: gofmt 코드 포맷 적용
     cmds:
       - gofmt -w .
 
   fmt-check:
-    desc: 포맷 규칙 준수 여부 확인 (수정 없음)
+    desc: 코드 포맷 준수 여부 확인 (수정 없음)
     cmds:
       - |
         out=$(gofmt -l .)
@@ -68,53 +100,60 @@ tasks:
           echo "$out"
           exit 1
         fi
+        echo "모든 파일이 gofmt 포맷을 준수하고 있습니다."
+
+  vet:
+    desc: go vet 정적 분석 실행
+    cmds:
+      - go vet ./...
 
   lint:
-    desc: staticcheck 린터 실행 (없으면 설치 안내)
+    aliases: [l]
+    desc: 린터 실행 (staticcheck 또는 golangci-lint)
     cmds:
       - |
-        command -v staticcheck >/dev/null 2>&1 || {
-          echo "staticcheck가 설치되어 있지 않습니다."
-          echo "설치: go install honnef.co/go/tools/cmd/staticcheck@latest"
+        if command -v staticcheck >/dev/null 2>&1; then
+          staticcheck ./...
+        elif command -v golangci-lint >/dev/null 2>&1; then
+          golangci-lint run --disable=errcheck ./...
+        else
+          echo "린터가 설치되어 있지 않습니다."
+          echo "staticcheck 설치: go install honnef.co/go/tools/cmd/staticcheck@latest"
           exit 1
-        }
-        staticcheck ./...
+        fi
 
   check:
-    desc: fmt-check + vet + test 한번에 실행
+    aliases: [c]
+    desc: 포맷 확인 + vet + 린트 + 테스트 일괄 실행
     cmds:
       - task: fmt-check
       - task: vet
+      - task: lint
       - task: test
 
-  # --- 설치 / 삭제 ---
+  # --- 예제 실행 ---
 
-  install:
-    desc: 현재 모듈을 GOPATH/bin에 설치 (예제 바이너리가 있을 경우)
+  example:config:
+    desc: Config 데모 예제 실행
     cmds:
-      - |
-        if ls cmd/*/main.go 1>/dev/null 2>&1; then
-          go install ./cmd/...
-          echo "설치 완료: {{.GOBIN}}"
-        else
-          echo "설치할 바이너리가 없습니다 (cmd/ 디렉토리 없음)."
-          echo "라이브러리로 사용: go get {{.MODULE}}"
-        fi
+      - go run ./examples/config_demo/main.go
 
-  uninstall:
-    desc: GOPATH/bin에서 설치된 바이너리 제거
+  example:features:
+    desc: Features 데모 예제 실행
     cmds:
-      - |
-        if ls cmd/*/main.go 1>/dev/null 2>&1; then
-          for dir in cmd/*/; do
-            bin="{{.GOBIN}}/$(basename "$dir")"
-            if [ -f "$bin" ]; then rm -f "$bin" && echo "삭제: $bin"; fi
-          done
-        else
-          echo "제거할 바이너리가 없습니다."
-        fi
+      - go run ./examples/features_demo/main.go
 
-  # --- 의존성 ---
+  example:logging:
+    desc: Logging & Error Handling 데모 예제 실행
+    cmds:
+      - go run ./examples/logging_error/main.go
+
+  example:rich:
+    desc: Rich UI 컴포넌트 데모 예제 실행
+    cmds:
+      - go run ./examples/rich_demo/main.go
+
+  # --- 의존성 관리 ---
 
   tidy:
     desc: go mod tidy (의존성 정리)
@@ -126,10 +165,23 @@ tasks:
     cmds:
       - go list -m all
 
-  # --- 정리 ---
+  # --- 설치 / 제거 / 정리 ---
+
+  install:
+    desc: wcli CLI를 GOPATH/bin 에 설치
+    cmds:
+      - go install ./cmd/wcli
+      - 'echo "설치 완료: {{.GOBIN}}/{{.BINARY_NAME}}"'
+
+  uninstall:
+    desc: GOPATH/bin 에서 wcli 제거
+    cmds:
+      - rm -f "{{.GOBIN}}/{{.BINARY_NAME}}" "{{.GOBIN}}/{{.BINARY_NAME}}.exe"
+      - 'echo "제거 완료: {{.GOBIN}}/{{.BINARY_NAME}}"'
 
   clean:
-    desc: 빌드 아티팩트 및 커버리지 파일 제거
+    desc: 빌드 아티팩트 (bin/), 커버리지 파일 및 임시 파일 제거
     cmds:
       - go clean ./...
-      - rm -f coverage.out coverage.html
+      - rm -rf {{.BIN_DIR}} coverage.out coverage.html
+      - 'echo "정리 완료"'

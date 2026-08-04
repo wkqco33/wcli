@@ -85,24 +85,11 @@ func isHexColor(s string) bool {
 		return false
 	}
 	for _, c := range s[1:] {
-		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')) {
+		if (c < '0' || c > '9') && (c < 'a' || c > 'f') && (c < 'A' || c > 'F') {
 			return false
 		}
 	}
 	return true
-}
-
-// isColorCode color(N) 형식의 256색 코드인지 확인합니다.
-func isColorCode(s string) (int, bool) {
-	if !strings.HasPrefix(s, "color(") || !strings.HasSuffix(s, ")") {
-		return 0, false
-	}
-	inner := s[6 : len(s)-1]
-	n, err := strconv.Atoi(inner)
-	if err != nil || n < 0 || n > 255 {
-		return 0, false
-	}
-	return n, true
 }
 
 // isTerminal w가 터미널(character device)인지 확인합니다.
@@ -267,7 +254,7 @@ func Markup(text string) string {
 					result.WriteString(code)
 				} else {
 					// 알 수 없는 태그는 무시하고 그대로 출력
-					result.WriteString(fmt.Sprintf("[%s]", tag))
+					fmt.Fprintf(&result, "[%s]", tag)
 				}
 			}
 			continue
