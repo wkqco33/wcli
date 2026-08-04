@@ -124,3 +124,9 @@ $RECYCLE.BIN/
 # Compiled binary
 /wcli
 cmd/*/wcli
+/bin/
+
+# Taskfile cache & Coverage output
+.task/
+coverage.html
+

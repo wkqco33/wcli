@@ -474,7 +474,7 @@ func writeYAMLMap(file *os.File, data map[string]any, indent int) error {
 				return err
 			}
 		} else {
-			if _, err := file.WriteString(fmt.Sprintf("%s%s: %v\n", spaces, k, v)); err != nil {
+			if _, err := fmt.Fprintf(file, "%s%s: %v\n", spaces, k, v); err != nil {
 				return err
 			}
 		}
@@ -491,18 +491,18 @@ func saveTOML(path string, data map[string]any) error {
 
 	for k, v := range data {
 		if _, ok := v.(map[string]any); !ok {
-			if _, err := file.WriteString(fmt.Sprintf("%s = %v\n", k, v)); err != nil {
+			if _, err := fmt.Fprintf(file, "%s = %v\n", k, v); err != nil {
 				return err
 			}
 		}
 	}
 	for k, v := range data {
 		if section, ok := v.(map[string]any); ok {
-			if _, err := file.WriteString(fmt.Sprintf("\n[%s]\n", k)); err != nil {
+			if _, err := fmt.Fprintf(file, "\n[%s]\n", k); err != nil {
 				return err
 			}
 			for sk, sv := range section {
-				if _, err := file.WriteString(fmt.Sprintf("%s = %v\n", sk, sv)); err != nil {
+				if _, err := fmt.Fprintf(file, "%s = %v\n", sk, sv); err != nil {
 					return err
 				}
 			}
@@ -519,7 +519,7 @@ func saveDotEnv(path string, data map[string]any) error {
 	defer file.Close()
 
 	for k, v := range data {
-		if _, err := file.WriteString(fmt.Sprintf("%s=%v\n", k, v)); err != nil {
+		if _, err := fmt.Fprintf(file, "%s=%v\n", k, v); err != nil {
 			return err
 		}
 	}

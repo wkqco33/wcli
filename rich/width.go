@@ -27,18 +27,18 @@ func runeWidth(r rune) int {
 func isWide(r rune) bool {
 	switch {
 	case r >= 0x1100 && r <= 0x115F, // 한글 자모
-		r >= 0x2E80 && r <= 0x303E, // CJK 부수/기호
-		r >= 0x3041 && r <= 0x33FF, // 히라가나/가타카나/한중일 기호
-		r >= 0x3400 && r <= 0x4DBF, // CJK 확장 A
-		r >= 0x4E00 && r <= 0x9FFF, // CJK 통합 한자
-		r >= 0xA000 && r <= 0xA4CF, // 이족 음절
-		r >= 0xAC00 && r <= 0xD7A3, // 한글 음절
-		r >= 0xF900 && r <= 0xFAFF, // CJK 호환 한자
-		r >= 0xFE30 && r <= 0xFE4F, // CJK 호환 형태
-		r >= 0xFF00 && r <= 0xFF60, // 전각 형태
-		r >= 0xFFE0 && r <= 0xFFE6, // 전각 기호
+		r >= 0x2E80 && r <= 0x303E,   // CJK 부수/기호
+		r >= 0x3041 && r <= 0x33FF,   // 히라가나/가타카나/한중일 기호
+		r >= 0x3400 && r <= 0x4DBF,   // CJK 확장 A
+		r >= 0x4E00 && r <= 0x9FFF,   // CJK 통합 한자
+		r >= 0xA000 && r <= 0xA4CF,   // 이족 음절
+		r >= 0xAC00 && r <= 0xD7A3,   // 한글 음절
+		r >= 0xF900 && r <= 0xFAFF,   // CJK 호환 한자
+		r >= 0xFE30 && r <= 0xFE4F,   // CJK 호환 형태
+		r >= 0xFF00 && r <= 0xFF60,   // 전각 형태
+		r >= 0xFFE0 && r <= 0xFFE6,   // 전각 기호
 		r >= 0x1F000 && r <= 0x1FAFF, // 이모지
-		r >= 0x2600 && r <= 0x27BF: // 기타 기호/딩뱃
+		r >= 0x2600 && r <= 0x27BF:   // 기타 기호/딩뱃
 		return true
 	}
 	return false

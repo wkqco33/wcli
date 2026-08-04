@@ -13,6 +13,9 @@ func setupTmpDir(t *testing.T) (tmpDir string, cleanup func()) {
 	if err != nil {
 		t.Fatalf("임시 디렉토리 생성 실패: %v", err)
 	}
+	if realPath, err := filepath.EvalSymlinks(tmpDir); err == nil {
+		tmpDir = realPath
+	}
 	origWd, err := os.Getwd()
 	if err != nil {
 		t.Fatalf("현재 디렉토리 획득 실패: %v", err)

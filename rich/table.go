@@ -165,13 +165,13 @@ func tableRow(row []string, widths []int, cols int, aligns []Align) string {
 
 		switch align {
 		case AlignRight:
-			b.WriteString(fmt.Sprintf(" %s%s |", strings.Repeat(" ", padding), val))
+			fmt.Fprintf(&b, " %s%s |", strings.Repeat(" ", padding), val)
 		case AlignCenter:
 			left := padding / 2
 			right := padding - left
-			b.WriteString(fmt.Sprintf(" %s%s%s |", strings.Repeat(" ", left), val, strings.Repeat(" ", right)))
+			fmt.Fprintf(&b, " %s%s%s |", strings.Repeat(" ", left), val, strings.Repeat(" ", right))
 		default:
-			b.WriteString(fmt.Sprintf(" %s%s |", val, strings.Repeat(" ", padding)))
+			fmt.Fprintf(&b, " %s%s |", val, strings.Repeat(" ", padding))
 		}
 	}
 	return b.String()

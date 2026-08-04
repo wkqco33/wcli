@@ -344,7 +344,8 @@ func TestExecuteContext(t *testing.T) {
 
 	// 3. nil 컨텍스트는 Background로 대체되어 패닉하지 않음
 	nilCmd := &wcli.Command{Use: "app", Run: func(ctx *wcli.Context) error { return nil }}
-	if err := nilCmd.ExecuteContext(nil, nil); err != nil {
+	var nilCtx context.Context
+	if err := nilCmd.ExecuteContext(nilCtx, nil); err != nil {
 		t.Errorf("nil 컨텍스트 실행 실패: %v", err)
 	}
 }

@@ -370,19 +370,6 @@ func (c *Command) collectPersistentPostRuns() []func(*Context) error {
 	return hooks
 }
 
-// matchesName 커맨드 이름 또는 별칭이 일치하는지 확인
-func (c *Command) matchesName(name string) bool {
-	if c.Name() == name {
-		return true
-	}
-	for _, alias := range c.Aliases {
-		if alias == name {
-			return true
-		}
-	}
-	return false
-}
-
 // isVersionRequested args에서 --version 플래그를 감지합니다.
 // 비-bool 플래그의 값으로 사용된 경우는 무시합니다.
 func (c *Command) isVersionRequested(args []string) bool {
