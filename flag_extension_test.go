@@ -320,3 +320,38 @@ func TestBindConfigStringSliceAcrossFormats(t *testing.T) {
 		})
 	}
 }
+
+func TestFlagMarkAllowed(t *testing.T) {
+	var mode string
+	fs := wcli.NewFlagSet()
+	fs.StringVar(&mode, "mode", "m", "", "실행 모드")
+	if err := fs.MarkAllowed("mode", "dev", "staging", "prod"); err != nil {
+		t.Fatalf("MarkAllowed 실패: %v", err)
+	}
+
+	// 1. 허용된 값 -> 정상
+	_, err := fs.Parse([]string{"--mode", "dev"})
+	if err != nil {
+		t.Fatalf("Parse 실패: %v", err)
+	}
+	if err := fs.Validate(); err != nil {
+		t.Errorf("'dev'는 허용된 값이므로 Validate 통과해야 함: %v", err)
+	}
+
+	// 2. 허용되지 않은 값 -> 에러
+	fs = wcli.NewFlagSet()
+	fs.StringVar(&mode, "mode", "m", "", "실행 모드")
+	_ = fs.MarkAllowed("mode", "dev", "staging", "prod")
+
+	_, err = fs.Parse([]string{"--mode", "invalid"})
+	if err != nil {
+		t.Fatalf("Parse 실패: %v", err)
+	}
+	err = fs.Validate()
+	if err == nil {
+		t.Error("허용되지 않은 값이므로 Validate 에러가 발생해야 함")
+	}
+	if !strings.Contains(err.Error(), "must be one of") {
+		t.Errorf("에러 메시지에 'must be one of' 포함 기대, 실제: %v", err)
+	}
+}

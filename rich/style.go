@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 )
@@ -78,6 +79,32 @@ var tagMap = map[string]string{
 	"bg-white":      BgWhite,
 }
 
+// isHexColor #rrggbb 형식의 16진수 컬러 코드인지 확인합니다.
+func isHexColor(s string) bool {
+	if len(s) != 7 || s[0] != '#' {
+		return false
+	}
+	for _, c := range s[1:] {
+		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')) {
+			return false
+		}
+	}
+	return true
+}
+
+// isColorCode color(N) 형식의 256색 코드인지 확인합니다.
+func isColorCode(s string) (int, bool) {
+	if !strings.HasPrefix(s, "color(") || !strings.HasSuffix(s, ")") {
+		return 0, false
+	}
+	inner := s[6 : len(s)-1]
+	n, err := strconv.Atoi(inner)
+	if err != nil || n < 0 || n > 255 {
+		return 0, false
+	}
+	return n, true
+}
+
 // isTerminal w가 터미널(character device)인지 확인합니다.
 func isTerminal(w io.Writer) bool {
 	if f, ok := w.(*os.File); ok {
@@ -124,6 +151,9 @@ func stripMarkup(text string) string {
 			if _, ok := tagMap[tag]; ok {
 				continue
 			}
+			if isColorTag(tag) {
+				continue
+			}
 			// 알 수 없는 여는 태그: Markup()과 동일하게 리터럴로 복원
 			result.WriteRune('[')
 			result.WriteString(tag)
@@ -137,6 +167,29 @@ func stripMarkup(text string) string {
 		}
 	}
 	return result.String()
+}
+
+// isColorTag #rrggbb, color(N), bg-#rrggbb, bg-color(N) 형식의 컬러 태그인지 확인합니다.
+func isColorTag(tag string) bool {
+	switch {
+	case strings.HasPrefix(tag, "bg-#") && len(tag) == 10:
+		return isHexColor(tag[3:])
+	case strings.HasPrefix(tag, "bg-color(") && strings.HasSuffix(tag, ")"):
+		inner := tag[9 : len(tag)-1]
+		if n, err := strconv.Atoi(inner); err == nil && n >= 0 && n <= 255 {
+			return true
+		}
+		return false
+	case strings.HasPrefix(tag, "#") && len(tag) == 7:
+		return isHexColor(tag)
+	case strings.HasPrefix(tag, "color(") && strings.HasSuffix(tag, ")"):
+		inner := tag[6 : len(tag)-1]
+		if n, err := strconv.Atoi(inner); err == nil && n >= 0 && n <= 255 {
+			return true
+		}
+		return false
+	}
+	return false
 }
 
 // EscapeMarkup s에 포함된 '['를 이스케이프하여 Markup()/stripMarkup()이 태그로
@@ -153,6 +206,7 @@ var markupCache sync.Map // map[string]string
 
 // Markup 간단한 마크업 파싱을 통해 텍스트에 ANSI 스타일을 적용합니다.
 // 동일한 입력에 대한 결과는 캐시됩니다.
+// 지원 태그: [bold], [red], [bg-blue], [#ff4500], [color(208)], [bg-#ff4500], [bg-color(208)]
 func Markup(text string) string {
 	if cached, ok := markupCache.Load(text); ok {
 		return cached.(string)
@@ -199,11 +253,16 @@ func Markup(text string) string {
 				for _, t := range activeTags {
 					if code, ok := tagMap[t]; ok {
 						result.WriteString(code)
+					} else if code := resolveColorTag(t); code != "" {
+						result.WriteString(code)
 					}
 				}
 			} else {
 				// 여는 태그
 				if code, ok := tagMap[tag]; ok {
+					activeTags = append(activeTags, tag)
+					result.WriteString(code)
+				} else if code := resolveColorTag(tag); code != "" {
 					activeTags = append(activeTags, tag)
 					result.WriteString(code)
 				} else {
@@ -231,6 +290,39 @@ func Markup(text string) string {
 		return actual.(string)
 	}
 	return output
+}
+
+// resolveColorTag #rrggbb, color(N), bg-#rrggbb, bg-color(N) 형식의 태그를 ANSI 코드로 변환합니다.
+// 알 수 없는 형식이면 빈 문자열을 반환합니다.
+func resolveColorTag(tag string) string {
+	switch {
+	case strings.HasPrefix(tag, "bg-#") && len(tag) == 10:
+		// 배경색 TrueColor: bg-#rrggbb
+		hex := tag[4:]
+		r, _ := strconv.ParseUint(hex[0:2], 16, 64)
+		g, _ := strconv.ParseUint(hex[2:4], 16, 64)
+		b, _ := strconv.ParseUint(hex[4:6], 16, 64)
+		return fmt.Sprintf("\033[48;2;%d;%d;%dm", r, g, b)
+	case strings.HasPrefix(tag, "bg-color(") && strings.HasSuffix(tag, ")"):
+		// 배경색 256색: bg-color(N)
+		inner := tag[9 : len(tag)-1]
+		if n, err := strconv.Atoi(inner); err == nil && n >= 0 && n <= 255 {
+			return fmt.Sprintf("\033[48;5;%dm", n)
+		}
+	case strings.HasPrefix(tag, "#") && len(tag) == 7:
+		// 전경색 TrueColor: #rrggbb
+		r, _ := strconv.ParseUint(tag[1:3], 16, 64)
+		g, _ := strconv.ParseUint(tag[3:5], 16, 64)
+		b, _ := strconv.ParseUint(tag[5:7], 16, 64)
+		return fmt.Sprintf("\033[38;2;%d;%d;%dm", r, g, b)
+	case strings.HasPrefix(tag, "color(") && strings.HasSuffix(tag, ")"):
+		// 전경색 256색: color(N)
+		inner := tag[6 : len(tag)-1]
+		if n, err := strconv.Atoi(inner); err == nil && n >= 0 && n <= 255 {
+			return fmt.Sprintf("\033[38;5;%dm", n)
+		}
+	}
+	return ""
 }
 
 // shouldColor w에 ANSI 코드를 출력해야 하는지 결정합니다.
