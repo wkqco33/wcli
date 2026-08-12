@@ -13,12 +13,6 @@ import (
 	"unsafe"
 )
 
-// ioctl 터미널 제어용 syscall 상수
-const (
-	ioctlGetTermios = syscall.TIOCGETA // TCGETS 대체 (macOS)
-	ioctlSetTermios = syscall.TIOCSETA // TCSETS 대체 (macOS)
-)
-
 // readPasswordNoEcho 터미널 에코 없이 비밀번호를 읽습니다.
 // 터미널이 아니면 일반 입력으로 폴백합니다.
 func readPasswordNoEcho() (string, error) {
