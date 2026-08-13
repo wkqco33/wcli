@@ -19,6 +19,7 @@ type configStore struct {
 	data       map[string]any
 	autoEnv    bool
 	envPrefix  string
+	strict     bool
 }
 
 var globalConfig = &configStore{
@@ -42,6 +43,7 @@ func Reset() {
 	globalConfig.data = make(map[string]any)
 	globalConfig.autoEnv = false
 	globalConfig.envPrefix = ""
+	globalConfig.strict = false
 }
 
 // SetConfigFile 설정 파일 경로를 지정합니다.
@@ -87,6 +89,14 @@ func AutomaticEnv() {
 	globalConfig.autoEnv = true
 }
 
+// SetStrictParsing YAML/TOML/INI 경량 파서의 엄격 모드를 설정합니다.
+// true이면 지원하지 않는 문법이나 잘못된 구문을 줄 번호 포함 에러로 반환합니다.
+func SetStrictParsing(strict bool) {
+	globalConfig.mu.Lock()
+	defer globalConfig.mu.Unlock()
+	globalConfig.strict = strict
+}
+
 // ReadInConfig 설정 파일을 읽어 메모리에 로드합니다.
 func ReadInConfig() error {
 	globalConfig.mu.Lock()
@@ -108,11 +118,11 @@ func ReadInConfig() error {
 			return fmt.Errorf("parse json config error: %w", err)
 		}
 	case "ini":
-		parsed, err = parseINIContent(string(content))
+		parsed, err = parseINIContent(string(content), globalConfig.strict)
 	case "yaml", "yml":
-		parsed, err = parseYAMLContent(string(content))
+		parsed, err = parseYAMLContent(string(content), globalConfig.strict)
 	case "toml":
-		parsed, err = parseTOMLContent(string(content))
+		parsed, err = parseTOMLContent(string(content), globalConfig.strict)
 	case "env":
 		parsed, err = parseDotEnvContent(string(content))
 	default:
@@ -349,12 +359,14 @@ func NormalizeKeys(val any) any {
 	}
 }
 
-func parseINIContent(content string) (map[string]any, error) {
+func parseINIContent(content string, strict bool) (map[string]any, error) {
 	data := make(map[string]any)
 	scanner := bufio.NewScanner(strings.NewReader(content))
 	var currentSection string
+	lineNum := 0
 
 	for scanner.Scan() {
+		lineNum++
 		line := strings.TrimSpace(scanner.Text())
 		if line == "" || strings.HasPrefix(line, "#") || strings.HasPrefix(line, ";") {
 			continue
@@ -367,6 +379,9 @@ func parseINIContent(content string) (map[string]any, error) {
 
 		parts := strings.SplitN(line, "=", 2)
 		if len(parts) != 2 {
+			if strict {
+				return nil, fmt.Errorf("ini parse error at line %d: expected key=value pair", lineNum)
+			}
 			continue
 		}
 
@@ -388,7 +403,7 @@ func parseINIContent(content string) (map[string]any, error) {
 	return data, scanner.Err()
 }
 
-func parseYAMLContent(content string) (map[string]any, error) {
+func parseYAMLContent(content string, strict bool) (map[string]any, error) {
 	data := make(map[string]any)
 	scanner := bufio.NewScanner(strings.NewReader(content))
 	var lines []string
@@ -419,13 +434,16 @@ func parseYAMLContent(content string) (map[string]any, error) {
 
 		pair := strings.SplitN(trimmed, ":", 2)
 		if len(pair) != 2 {
+			if strict {
+				return nil, fmt.Errorf("yaml parse error at line %d: expected key: value", i+1)
+			}
 			continue
 		}
 
 		key := strings.TrimSpace(pair[0])
 		val := strings.TrimSpace(pair[1])
 		if val != "" {
-			parsed, err := parseConfigScalarOrArray(val)
+			parsed, err := parseConfigScalarOrArray(val, i+1, "yaml")
 			if err != nil {
 				return nil, err
 			}
@@ -449,12 +467,15 @@ func parseYAMLContent(content string) (map[string]any, error) {
 					break
 				}
 				if !strings.HasPrefix(listTrimmed, "- ") {
+					if strict {
+						return nil, fmt.Errorf("yaml parse error at line %d: list item must start with '- '", j+1)
+					}
 					i = j - 1
 					break
 				}
 
 				itemVal := strings.TrimSpace(strings.TrimPrefix(listTrimmed, "- "))
-				parsed, err := parseConfigScalarOrArray(itemVal)
+				parsed, err := parseConfigScalarOrArray(itemVal, j+1, "yaml")
 				if err != nil {
 					return nil, err
 				}
@@ -473,12 +494,14 @@ func parseYAMLContent(content string) (map[string]any, error) {
 	return data, nil
 }
 
-func parseTOMLContent(content string) (map[string]any, error) {
+func parseTOMLContent(content string, strict bool) (map[string]any, error) {
 	data := make(map[string]any)
 	currentMap := data
 	scanner := bufio.NewScanner(strings.NewReader(content))
+	lineNum := 0
 
 	for scanner.Scan() {
+		lineNum++
 		line := strings.TrimSpace(scanner.Text())
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue
@@ -495,11 +518,13 @@ func parseTOMLContent(content string) (map[string]any, error) {
 		if len(parts) == 2 {
 			key := strings.TrimSpace(parts[0])
 			val := strings.TrimSpace(parts[1])
-			parsed, err := parseConfigScalarOrArray(val)
+			parsed, err := parseConfigScalarOrArray(val, lineNum, "toml")
 			if err != nil {
 				return nil, err
 			}
 			currentMap[key] = parsed
+		} else if strict {
+			return nil, fmt.Errorf("toml parse error at line %d: expected key = value", lineNum)
 		}
 	}
 
@@ -544,21 +569,24 @@ func parseDotEnvContent(content string) (map[string]any, error) {
 	return data, scanner.Err()
 }
 
-func parseConfigScalarOrArray(val string) (any, error) {
+func parseConfigScalarOrArray(val string, lineNum int, format string) (any, error) {
 	val = strings.TrimSpace(val)
 	if strings.HasPrefix(val, "[") && strings.HasSuffix(val, "]") {
-		return parseInlineArray(val)
+		return parseInlineArray(val, lineNum, format)
 	}
 	return strings.Trim(val, `"'`), nil
 }
 
-func parseInlineArray(val string) ([]any, error) {
+func parseInlineArray(val string, lineNum int, format string) ([]any, error) {
 	inner := strings.TrimSpace(strings.TrimSuffix(strings.TrimPrefix(val, "["), "]"))
 	if inner == "" {
 		return []any{}, nil
 	}
 
-	parts := splitInlineArrayItems(inner)
+	parts, err := splitInlineArrayItems(inner)
+	if err != nil {
+		return nil, fmt.Errorf("%s parse error at line %d: %w", format, lineNum, err)
+	}
 	items := make([]any, 0, len(parts))
 	for _, part := range parts {
 		part = strings.TrimSpace(part)
@@ -570,7 +598,7 @@ func parseInlineArray(val string) ([]any, error) {
 	return items, nil
 }
 
-func splitInlineArrayItems(val string) []string {
+func splitInlineArrayItems(val string) ([]string, error) {
 	var (
 		items   []string
 		current strings.Builder
@@ -594,8 +622,11 @@ func splitInlineArrayItems(val string) []string {
 			current.WriteRune(r)
 		}
 	}
+	if quote != 0 {
+		return nil, fmt.Errorf("unterminated quoted string in array")
+	}
 	items = append(items, current.String())
-	return items
+	return items, nil
 }
 
 func nextYAMLSignificantLine(lines []string, start int) (string, int, bool) {

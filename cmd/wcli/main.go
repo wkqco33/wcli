@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"text/template"
 
@@ -23,6 +24,8 @@ var (
 	readFileFunc  = os.ReadFile
 	writeFileFunc = os.WriteFile
 )
+
+var commandNamePattern = regexp.MustCompile(`^[a-z][a-z0-9-]*$`)
 
 type initData struct {
 	ModuleName  string
@@ -120,8 +123,8 @@ func buildInitCmd() *wcli.Command {
 				return err
 			}
 
-			// 3. Makefile 작성
-			if err := renderToFile("Makefile", MakefileTemplate, data); err != nil {
+			// 3. Taskfile.yml 작성
+			if err := renderToFile("Taskfile.yml", TaskfileTemplate, data); err != nil {
 				return err
 			}
 
@@ -210,6 +213,9 @@ func buildAddCmd() *wcli.Command {
 			if cmdName == "" {
 				return fmt.Errorf("커맨드 이름이 비어 있습니다")
 			}
+			if err := validateCommandName(cmdName); err != nil {
+				return err
+			}
 			fileName := cmdName + ".go"
 
 			// main.go 유무 체크하여 wcli 프로젝트인지 검증
@@ -217,9 +223,7 @@ func buildAddCmd() *wcli.Command {
 				return fmt.Errorf("wcli 프로젝트의 루트 디렉토리가 아닙니다 (main.go가 존재하지 않습니다)")
 			}
 
-			// 구조체 이름 생성 (첫 글자 대문자화 + Cmd 접미사, 멀티바이트 안전)
-			runes := []rune(cmdName)
-			structName := strings.ToUpper(string(runes[:1])) + string(runes[1:]) + "Cmd"
+			structName := toCommandStructName(cmdName)
 
 			rich.Println("[cyan]커맨드 추가 중...[/cyan] (파일명: %s, 구조체명: %s)", fileName, structName)
 
@@ -287,6 +291,30 @@ func injectCommandToMain(structName string) error {
 	newMainStr := strings.Replace(mainStr, wcliCommandsMarker, bindingCode, 1)
 
 	return writeFileFunc("main.go", []byte(newMainStr), 0644)
+}
+
+func validateCommandName(name string) error {
+	if !commandNamePattern.MatchString(name) {
+		return fmt.Errorf("유효하지 않은 커맨드 이름입니다: %q (허용: 소문자 영문 시작, 소문자/숫자/하이픈 조합)", name)
+	}
+	return nil
+}
+
+func toCommandStructName(name string) string {
+	parts := strings.Split(name, "-")
+	var b strings.Builder
+	for _, part := range parts {
+		if part == "" {
+			continue
+		}
+		runes := []rune(part)
+		b.WriteString(strings.ToUpper(string(runes[:1])))
+		if len(runes) > 1 {
+			b.WriteString(string(runes[1:]))
+		}
+	}
+	b.WriteString("Cmd")
+	return b.String()
 }
 
 // checkResult doctor 점검 결과 항목

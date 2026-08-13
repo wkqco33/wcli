@@ -11,7 +11,7 @@
 ### 프로젝트 초기화
 
 ```bash
-# 새 wcli 프로젝트 생성 (go.mod, main.go, Makefile 자동 생성)
+# 새 wcli 프로젝트 생성 (go.mod, main.go, Taskfile.yml 자동 생성)
 wcli init github.com/myorg/myapp
 
 # wcli 라이브러리 경로 직접 지정
@@ -25,6 +25,9 @@ wcli init --lib-path ./wcli github.com/myorg/myapp
 ```bash
 # create.go 파일 생성 + main.go에 rootCmd.AddCommand(CreateCmd) 자동 주입
 wcli add create
+
+# 하이픈 명령어도 지원 (예: user-profile → UserProfileCmd)
+wcli add user-profile
 ```
 
 `main.go`에 `// wcli:commands` 마커가 있어야 자동 등록이 됩니다.

@@ -41,6 +41,7 @@ type configBindLoader struct {
 	sources []configSource
 	tagName string
 	prefix  string
+	strict  bool
 }
 
 // BindOption Load() 함수에 전달하는 옵션 타입
@@ -91,6 +92,13 @@ func WithPrefix(prefix string) BindOption {
 	}
 }
 
+// WithStrictParsing YAML/TOML/INI 파서의 엄격 모드를 설정합니다.
+func WithStrictParsing(strict bool) BindOption {
+	return func(l *configBindLoader) {
+		l.strict = strict
+	}
+}
+
 // Load 설정 소스들로부터 데이터를 로드해 target 구조체에 바인딩합니다.
 // 소스는 옵션 순서대로 병합되며, 뒤에 오는 소스가 앞의 값을 덮어씁니다.
 //
@@ -125,7 +133,7 @@ func Load(target any, options ...BindOption) error {
 
 	merged := make(map[string]any)
 	for _, src := range loader.sources {
-		data, err := loadBindSource(src)
+		data, err := loadBindSource(src, loader.strict)
 		if err != nil {
 			if os.IsNotExist(err) {
 				continue
@@ -161,7 +169,7 @@ func WriteDefault(target any, path string) error {
 
 // --- 내부 로직 ---
 
-func loadBindSource(src configSource) (map[string]any, error) {
+func loadBindSource(src configSource, strict bool) (map[string]any, error) {
 	var raw map[string]any
 	var err error
 	switch src.stype {
@@ -182,13 +190,13 @@ func loadBindSource(src configSource) (map[string]any, error) {
 		if readErr != nil {
 			return nil, readErr
 		}
-		raw, err = parseYAMLContent(string(content))
+		raw, err = parseYAMLContent(string(content), strict)
 	case sourceTOML:
 		content, readErr := os.ReadFile(src.path)
 		if readErr != nil {
 			return nil, readErr
 		}
-		raw, err = parseTOMLContent(string(content))
+		raw, err = parseTOMLContent(string(content), strict)
 	default:
 		return nil, fmt.Errorf("unsupported source type: %v", src.stype)
 	}

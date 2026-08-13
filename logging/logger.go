@@ -101,31 +101,46 @@ type NoOpLogger struct{}
 
 func (n *NoOpLogger) Log(level LogLevel, format string, args ...any) {}
 
+// LoggerManager는 전역 상태와 분리 가능한 인스턴스 기반 로거 컨테이너입니다.
+type LoggerManager struct {
+	mu     sync.RWMutex
+	logger Logger
+}
+
+// NewLoggerManager 새 로거 매니저를 생성합니다.
+func NewLoggerManager() *LoggerManager {
+	return &LoggerManager{logger: &NoOpLogger{}}
+}
+
+// SetLogger 매니저의 로거를 설정합니다.
+func (m *LoggerManager) SetLogger(l Logger) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if l != nil {
+		m.logger = l
+	} else {
+		m.logger = &NoOpLogger{}
+	}
+}
+
+// GetLogger 매니저의 로거를 반환합니다.
+func (m *LoggerManager) GetLogger() Logger {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.logger
+}
+
 // Global Logger (기본은 NoOpLogger).
-// config 패키지의 configStore와 동일하게 sync.RWMutex로 보호합니다:
-// SetLogger는 런타임 중 (예: --debug 플래그 처리, 초기화 훅 등) 다른 goroutine이
-// Debug/Info/Warn/Error를 호출 중일 때도 안전하게 호출될 수 있어야 합니다.
-var (
-	loggerMu     sync.RWMutex
-	globalLogger Logger = &NoOpLogger{}
-)
+var globalManager = NewLoggerManager()
 
 // SetLogger 전역 로거를 주입합니다.
 func SetLogger(l Logger) {
-	loggerMu.Lock()
-	defer loggerMu.Unlock()
-	if l != nil {
-		globalLogger = l
-	} else {
-		globalLogger = &NoOpLogger{}
-	}
+	globalManager.SetLogger(l)
 }
 
 // GetLogger 전역 로거를 획득합니다.
 func GetLogger() Logger {
-	loggerMu.RLock()
-	defer loggerMu.RUnlock()
-	return globalLogger
+	return globalManager.GetLogger()
 }
 
 // Debug 디버그 레벨 로그를 기록합니다.
