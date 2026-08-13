@@ -226,7 +226,7 @@ func TestValidateCommandName(t *testing.T) {
 		}
 	}
 
-	invalid := []string{"", "-create", "Create", "create_user", "1create", "create user", "../x"}
+	invalid := []string{"", "-create", "create-", "Create", "create_user", "1create", "create user", "../x"}
 	for _, name := range invalid {
 		if err := validateCommandName(name); err == nil {
 			t.Fatalf("유효하지 않은 이름이 허용됨: %s", name)
