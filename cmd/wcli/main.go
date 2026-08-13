@@ -25,7 +25,7 @@ var (
 	writeFileFunc = os.WriteFile
 )
 
-var commandNamePattern = regexp.MustCompile(`^[a-z][a-z0-9-]*$`)
+var commandNamePattern = regexp.MustCompile(`^[a-z][a-z0-9]*(-[a-z0-9]+)*$`)
 
 type initData struct {
 	ModuleName  string
