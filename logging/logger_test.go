@@ -153,3 +153,22 @@ func TestDefaultLoggerUsesInjectableClock(t *testing.T) {
 		t.Fatalf("고정 시계가 반영되어야 함: %q", buf.String())
 	}
 }
+
+func TestLoggerManagerIsolation(t *testing.T) {
+	m1 := NewLoggerManager()
+	m2 := NewLoggerManager()
+
+	var b1, b2 bytes.Buffer
+	m1.SetLogger(NewDefaultLogger(&b1, LevelDebug, false))
+	m2.SetLogger(NewDefaultLogger(&b2, LevelDebug, false))
+
+	m1.GetLogger().Log(LevelInfo, "one")
+	m2.GetLogger().Log(LevelInfo, "two")
+
+	if !strings.Contains(b1.String(), "one") || strings.Contains(b1.String(), "two") {
+		t.Fatalf("m1 로거 격리 실패: %q", b1.String())
+	}
+	if !strings.Contains(b2.String(), "two") || strings.Contains(b2.String(), "one") {
+		t.Fatalf("m2 로거 격리 실패: %q", b2.String())
+	}
+}

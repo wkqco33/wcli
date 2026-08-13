@@ -59,11 +59,14 @@ cmd.Flags().MarkFlagsRequiredTogether("user", "password")
 > - **미지원:** 멀티라인 값, YAML 앵커/별칭, TOML 인라인 테이블, 값 안의 구분자(예: 따옴표로 감싼 `:`나 `=`)
 > - YAML 들여쓰기는 **공백만** 지원하며 탭은 인식하지 않습니다.
 > - 모든 스칼라 값은 **문자열**로 로드됩니다(타입 변환은 플래그 바인딩 시점에 수행).
+>
+> 엄격한 검증이 필요하면 strict 모드를 활성화해 지원하지 않는 구문을 즉시 에러(줄 번호 포함)로 처리할 수 있습니다.
 
 ```go
 import "github.com/seoyc/wcli/config"
 
 config.SetConfigFile("config.yaml")
+config.SetStrictParsing(true) // YAML/TOML/INI 구문 엄격 검증
 if err := config.ReadInConfig(); err != nil {
     os.Exit(1)
 }
@@ -153,6 +156,7 @@ var cfg AppConfig
 err := config.Load(&cfg,
     config.WithDotEnv(".env"),          // .env 파일
     config.WithFiles("config.json", "config.yaml"), // JSON/YAML/TOML 파일 (대소문자 구분 없이 자동 매칭 지원)
+    config.WithStrictParsing(true),     // YAML/TOML/INI 구문 엄격 검증
     config.WithEnv(),                   // 시스템 환경변수 (최우선)
     config.WithPrefix("APP"),           // 환경변수 접두사
 )
@@ -166,4 +170,17 @@ err := config.Load(&cfg,
 config.WriteDefault(&cfg, "config.yaml")   // YAML로 저장
 config.WriteDefault(&cfg, "config.toml")   // TOML로 저장
 config.WriteDefault(&cfg, ".env")          // .env로 저장
+```
+
+### 인스턴스 기반 Store (전역 상태 분리)
+
+전역 `config` 상태 대신 독립 인스턴스를 사용하려면 `config.NewStore()`를 사용하세요.
+
+```go
+store := config.NewStore()
+store.SetConfigFile("config.yaml")
+store.SetStrictParsing(true)
+_ = store.ReadInConfig()
+
+host := store.GetString("app.host")
 ```
