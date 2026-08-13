@@ -297,6 +297,14 @@ func main() {
     cmd.Execute(os.Args[1:])
 }
 ```
+
+전역 상태 분리가 필요하면 인스턴스 기반 매니저를 사용할 수 있습니다.
+
+```go
+manager := logging.NewLoggerManager()
+manager.SetLogger(logging.NewDefaultLogger(os.Stderr, logging.LevelDebug, true))
+manager.GetLogger().Log(logging.LevelInfo, "instance logger")
+```
 ## 셸 자동 완성 (Shell Autocomplete)
 
 `wcli.NewCompletionCommand`로 Bash / Zsh / Fish 자동 완성 스크립트를 생성합니다.

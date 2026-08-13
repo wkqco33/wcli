@@ -3,7 +3,7 @@ package main
 // GoModTemplate go.mod 파일 뼈대 템플릿
 const GoModTemplate = `module {{.ModuleName}}
 
-go 1.22
+go 1.26.1
 
 require github.com/seoyc/wcli v0.0.0
 
@@ -76,15 +76,28 @@ var {{.CmdStructName}} = &wcli.Command{
 }
 `
 
-// MakefileTemplate 빌드 편의성을 돕는 Makefile 템플릿
-const MakefileTemplate = `.PHONY: build test run
+// TaskfileTemplate 빌드 편의성을 돕는 Taskfile 템플릿
+const TaskfileTemplate = `version: '3'
 
-build:
-	go build -o {{.AppName}} .
+tasks:
+  default:
+    aliases: [help]
+    silent: true
+    cmds:
+      - task --list
 
-test:
-	go test ./...
+  build:
+    desc: 컴파일 오류 확인
+    cmds:
+      - go build ./...
 
-run:
-	go run main.go
+  test:
+    desc: 전체 테스트 실행
+    cmds:
+      - go test ./...
+
+  run:
+    desc: 애플리케이션 실행
+    cmds:
+      - go run main.go
 `

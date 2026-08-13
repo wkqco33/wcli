@@ -45,11 +45,11 @@ func TestScaffolderInit(t *testing.T) {
 	if err := renderToFile("main.go", MainTemplate, data); err != nil {
 		t.Fatalf("main.go 생성 실패: %v", err)
 	}
-	if err := renderToFile("Makefile", MakefileTemplate, data); err != nil {
-		t.Fatalf("Makefile 생성 실패: %v", err)
+	if err := renderToFile("Taskfile.yml", TaskfileTemplate, data); err != nil {
+		t.Fatalf("Taskfile.yml 생성 실패: %v", err)
 	}
 
-	for _, file := range []string{"go.mod", "main.go", "Makefile"} {
+	for _, file := range []string{"go.mod", "main.go", "Taskfile.yml"} {
 		if _, err := os.Stat(filepath.Join(tmpDir, file)); os.IsNotExist(err) {
 			t.Errorf("파일이 생성되지 않음: %s", file)
 		}
@@ -207,7 +207,7 @@ func TestBuildInitCmd(t *testing.T) {
 	if err := cmd.Execute([]string{"--lib-path", "./wcli", "myorg/myapp"}); err != nil {
 		t.Fatalf("init 실행 실패: %v", err)
 	}
-	for _, file := range []string{"go.mod", "main.go", "Makefile"} {
+	for _, file := range []string{"go.mod", "main.go", "Taskfile.yml"} {
 		if _, err := os.Stat(filepath.Join(tmpDir, file)); os.IsNotExist(err) {
 			t.Errorf("파일이 생성되지 않음: %s", file)
 		}
@@ -215,6 +215,35 @@ func TestBuildInitCmd(t *testing.T) {
 	// 모듈 인자가 없으면 에러
 	if err := buildInitCmd().Execute(nil); err == nil {
 		t.Error("모듈명 없이 실행 시 에러가 발생해야 함")
+	}
+}
+
+func TestValidateCommandName(t *testing.T) {
+	valid := []string{"create", "create-user", "v2", "a1-b2"}
+	for _, name := range valid {
+		if err := validateCommandName(name); err != nil {
+			t.Fatalf("유효한 이름이 거부됨: %s (%v)", name, err)
+		}
+	}
+
+	invalid := []string{"", "-create", "Create", "create_user", "1create", "create user", "../x"}
+	for _, name := range invalid {
+		if err := validateCommandName(name); err == nil {
+			t.Fatalf("유효하지 않은 이름이 허용됨: %s", name)
+		}
+	}
+}
+
+func TestToCommandStructName(t *testing.T) {
+	tests := map[string]string{
+		"create":      "CreateCmd",
+		"create-user": "CreateUserCmd",
+		"user-v2":     "UserV2Cmd",
+	}
+	for input, want := range tests {
+		if got := toCommandStructName(input); got != want {
+			t.Fatalf("구조체 이름 변환 실패: input=%s got=%s want=%s", input, got, want)
+		}
 	}
 }
 
