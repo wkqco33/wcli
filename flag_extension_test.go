@@ -34,7 +34,7 @@ func TestFlagBindEnv(t *testing.T) {
 	}
 
 	// 2. 환경 변수가 설정되면 자동으로 주입 확인
-	os.Setenv("WCLI_TEST_TOKEN", "EnvValue123")
+	os.Setenv("WCLI_TEST_TOKEN", "example-env-token")
 	defer os.Unsetenv("WCLI_TEST_TOKEN")
 
 	// Parse 수행 후 Validate 시 환경변수 바인딩이 일어남
@@ -49,7 +49,7 @@ func TestFlagBindEnv(t *testing.T) {
 	if err := fs.Validate(); err != nil {
 		t.Fatalf("Validate 실패: %v", err)
 	}
-	if token != "EnvValue123" {
+	if token != "example-env-token" {
 		t.Errorf("token에 환경 변수 값이 바인딩되지 않음, 실제: %q", token)
 	}
 }

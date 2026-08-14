@@ -188,7 +188,7 @@ func TestLoadPointer(t *testing.T) {
 
 func TestLoadCaseInsensitivity(t *testing.T) {
 	resetConfigState(t)
-	yamlContent := "host: case.example.com\ndebug: false\ndatabase:\n  pass: my-secret-key\n"
+	yamlContent := "host: case.example.com\ndebug: false\ndatabase:\n  pass: example-password\n"
 	if err := os.WriteFile("test_case.yaml", []byte(yamlContent), 0644); err != nil {
 		t.Fatal(err)
 	}
@@ -202,8 +202,8 @@ func TestLoadCaseInsensitivity(t *testing.T) {
 	if cfg.Host != "case.example.com" {
 		t.Errorf("Host (소문자 파싱/대문자 바인딩): 예상 case.example.com, 실제 %s", cfg.Host)
 	}
-	if cfg.DB.Pass != "my-secret-key" {
-		t.Errorf("DB.Pass (소문자 중첩 파싱): 예상 my-secret-key, 실제 %s", cfg.DB.Pass)
+	if cfg.DB.Pass != "example-password" {
+		t.Errorf("DB.Pass (소문자 중첩 파싱): 예상 example-password, 실제 %s", cfg.DB.Pass)
 	}
 }
 

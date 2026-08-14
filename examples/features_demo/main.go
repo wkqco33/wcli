@@ -15,13 +15,13 @@
 //	go run ./examples/features_demo completion zsh
 //
 //	# 3. 환경 변수 자동 바인딩 테스트
-//	API_TOKEN="SecretToken123" go run ./examples/features_demo --host localhost
+//	API_TOKEN="example-token" go run ./examples/features_demo --host localhost
 //
 //	# 4. 상호 배제 플래그 에러 발생 테스트 (--json과 --yaml을 같이 지정 시 에러)
-//	API_TOKEN="SecretToken123" go run ./examples/features_demo --host localhost --json --yaml
+//	API_TOKEN="example-token" go run ./examples/features_demo --host localhost --json --yaml
 //
 //	# 5. 필수 동반 지정 플래그 에러 발생 테스트 (--user를 지정했으나 --password 누락 시 에러)
-//	API_TOKEN="SecretToken123" go run ./examples/features_demo --host localhost --user alice
+//	API_TOKEN="example-token" go run ./examples/features_demo --host localhost --user alice
 package main
 
 import (
