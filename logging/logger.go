@@ -1,3 +1,4 @@
+// Package logging provides lightweight, structured console logging with dynamic level control and markup support.
 package logging
 
 import (

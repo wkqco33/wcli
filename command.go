@@ -1,3 +1,4 @@
+// Package wcli provides a lightweight, zero-dependency, high-performance CLI command library with rich terminal formatting.
 package wcli
 
 import (

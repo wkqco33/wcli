@@ -1,3 +1,4 @@
+// Package rich provides rich terminal text formatting, ANSI markup, spinners, progress bars, tables, and boxes.
 package rich
 
 import (

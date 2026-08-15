@@ -89,6 +89,10 @@ type commandGroupData struct {
 }
 
 type flagHelpData struct {
+	Name         string
+	Shorthand    string
+	TypeStr      string
+	Required     bool
 	ShortPart    string
 	FlagPart     string
 	RequiredMark string
@@ -314,6 +318,10 @@ func buildFlagHelpData(f *Flag) flagHelpData {
 	}
 
 	return flagHelpData{
+		Name:         f.Name,
+		Shorthand:    f.Shorthand,
+		TypeStr:      typeStr,
+		Required:     f.required,
 		ShortPart:    shortPart,
 		FlagPart:     flagPart,
 		RequiredMark: requiredMark,

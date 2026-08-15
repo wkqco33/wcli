@@ -1,3 +1,4 @@
+// Package config provides zero-dependency configuration loading (JSON, YAML, TOML, ENV) and struct binding for wcli.
 package config
 
 import (

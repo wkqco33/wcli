@@ -1,9 +1,13 @@
 # wcli
 
+[![Go Reference](https://pkg.go.dev/badge/github.com/seoyc/wcli.svg)](https://pkg.go.dev/github.com/seoyc/wcli)
+[![Go Report Card](https://goreportcard.com/badge/github.com/seoyc/wcli)](https://goreportcard.com/report/github.com/seoyc/wcli)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
 `wcli`는 Go 언어로 작성된 가볍고 성능 중심적인 CLI 명령어 라이브러리입니다.
 [Cobra](https://github.com/spf13/cobra)에서 영감을 받아 제작되었으며, Python의 [`rich`](https://github.com/Textualize/rich) 라이브러리처럼 **마크업 기반 터미널 컬러 출력**을 내장합니다.
 
-## 특징
+## ✨ 특징
 
 - **제로 의존성**: 외부 패키지 없이 순수 Go 표준 라이브러리만 사용
 - **성능 최우선**: O(1) 커맨드 라우팅 맵, 정렬 캐시, 마크업 파싱 캐시
@@ -15,7 +19,23 @@
 - **Fuzzy 커맨드 매칭**: 오타 입력 시 유사 커맨드 자동 제안
 - **셸 자동 완성**: Bash / Zsh / Fish 완성 스크립트 생성
 
-## 빠른 시작
+## 📦 설치
+
+### 라이브러리 설치
+
+```bash
+go get github.com/seoyc/wcli
+```
+
+### CLI 스캐폴딩 도구 설치 (선택)
+
+새로운 `wcli` 기반 CLI 프로젝트를 신속히 구성할 수 있는 스캐폴딩 도구입니다.
+
+```bash
+go install github.com/seoyc/wcli/cmd/wcli@latest
+```
+
+## 🚀 빠른 시작
 
 ```go
 package main
@@ -53,7 +73,7 @@ func main() {
 }
 ```
 
-## 문서 안내
+## 📚 상세 문서
 
 긴 README 대신 주제별 문서로 나눠서 관리합니다. 필요한 기능부터 바로 찾아보세요.
 
@@ -61,18 +81,13 @@ func main() {
 - [Rich 출력 가이드](docs/rich-guide.md): 마크업, Spinner, ProgressBar, Interactive Prompt
 - [설정 및 고급 플래그 가이드](docs/config-guide.md): 환경 변수, 설정 파일, 플래그 제약 조건, 구조체 바인딩
 - [CLI 도구 및 개발 워크플로우](docs/tooling-guide.md): `cmd/wcli` 도구와 `Taskfile.yml` 사용법
-- [변경 이력](CHANGE_LOG.md)
+- [기여 가이드](CONTRIBUTING.md)
+- [변경 이력](CHANGELOG.md)
 
-## 문서 사용 순서
+## 🤝 기여 및 피드백
 
-1. 처음 시작할 때는 이 README의 빠른 시작 예제를 확인합니다.
-2. 실제 CLI 구조를 설계할 때는 [커맨드 및 플래그 가이드](docs/command-guide.md)를 봅니다.
-3. 터미널 출력 꾸미기가 필요하면 [Rich 출력 가이드](docs/rich-guide.md)를 봅니다.
-4. 설정 파일, 환경 변수, 고급 바인딩이 필요하면 [설정 및 고급 플래그 가이드](docs/config-guide.md)를 봅니다.
-5. 프로젝트 스캐폴딩이나 저장소 개발 작업은 [CLI 도구 및 개발 워크플로우](docs/tooling-guide.md)를 봅니다.
+버그 제보나 기능 제안은 언제든지 환영합니다. 자세한 개발 워크플로우와 테스트 방법은 [기여 가이드 (CONTRIBUTING.md)](CONTRIBUTING.md)를 참고해 주세요.
 
-## 포크/배포 및 모듈 경로 정책
+## 📄 라이선스
 
-- 기본 모듈 경로는 `github.com/seoyc/wcli`를 유지합니다.
-- 포크 저장소에서 독자 배포를 하려면 모듈 경로와 스캐폴딩 템플릿의 `require/replace` 경로를 함께 변경하세요.
-- 내부 개발용 포크라면 기존 모듈 경로를 유지하고 `replace`로 로컬 경로를 연결하는 방식을 권장합니다.
+이 프로젝트는 [MIT License](LICENSE)에 따라 배포됩니다.

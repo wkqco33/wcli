@@ -178,3 +178,27 @@ func TestCategorizedGlobalFlagsInHelp(t *testing.T) {
 		t.Fatalf("글로벌 플래그 출력 누락: %q", out)
 	}
 }
+
+func TestCustomHelpTemplateFlagFields(t *testing.T) {
+	var buf bytes.Buffer
+	cmd := &wcli.Command{
+		Use:          "custom_app",
+		Short:        "커스텀 템플릿 테스트",
+		OutWriter:    &buf,
+		HelpTemplate: `{{range .LocalFlags}}Flag: {{.Name}} ({{.Shorthand}}), Type: {{.TypeStr}}, Required: {{.Required}}, Usage: {{.Usage}}{{end}}`,
+		Run:          func(ctx *wcli.Context) error { return nil },
+	}
+
+	var name string
+	cmd.Flags().StringVar(&name, "name", "n", "", "사용자 이름")
+	_ = cmd.Flags().MarkRequired("name")
+
+	if err := cmd.Execute([]string{"--help"}); err != nil {
+		t.Fatalf("--help 실행 에러: %v", err)
+	}
+
+	out := buf.String()
+	if !strings.Contains(out, "Flag: name (n), Type: string, Required: true, Usage: 사용자 이름") {
+		t.Errorf("커스텀 템플릿 플래그 필드 렌더링 실패, 실제 출력: %q", out)
+	}
+}
