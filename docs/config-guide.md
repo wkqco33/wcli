@@ -63,7 +63,7 @@ cmd.Flags().MarkFlagsRequiredTogether("user", "password")
 > 엄격한 검증이 필요하면 strict 모드를 활성화해 지원하지 않는 구문을 즉시 에러(줄 번호 포함)로 처리할 수 있습니다.
 
 ```go
-import "github.com/seoyc/wcli/config"
+import "github.com/wkqco33/wcli/config"
 
 config.SetConfigFile("config.yaml")
 config.SetStrictParsing(true) // YAML/TOML/INI 구문 엄격 검증
@@ -139,7 +139,7 @@ if err := config.ReloadConfig(); err != nil {
 설정 파일, `.env`, 환경변수 값을 구조체에 직접 바인딩합니다.
 
 ```go
-import "github.com/seoyc/wcli/config"
+import "github.com/wkqco33/wcli/config"
 
 type AppConfig struct {
     Host    string   `wcli:"HOST" default:"localhost"`

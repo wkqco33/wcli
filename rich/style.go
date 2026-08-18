@@ -109,6 +109,9 @@ func isTerminal(w io.Writer) bool {
 // 경로)에서 실제 마크업이 아닌 텍스트가 유실되거나, 폭 계산(DisplayWidth)이 실제
 // 출력과 어긋나는 문제가 생깁니다.
 func stripMarkup(text string) string {
+	if strings.IndexByte(text, '[') == -1 {
+		return text
+	}
 	var result strings.Builder
 	runes := []rune(text)
 	inTag := false
@@ -189,16 +192,33 @@ func EscapeMarkup(s string) string {
 	return strings.ReplaceAll(s, "[", "\\[")
 }
 
-// markupCache Markup() 결과를 캐시합니다. 동일 문자열은 한 번만 파싱됩니다.
-var markupCache sync.Map // map[string]string
+const maxMarkupCacheSize = 1024
+
+type markupCacheStore struct {
+	mu      sync.RWMutex
+	entries map[string]string
+}
+
+var mCache = &markupCacheStore{
+	entries: make(map[string]string),
+}
 
 // Markup 간단한 마크업 파싱을 통해 텍스트에 ANSI 스타일을 적용합니다.
-// 동일한 입력에 대한 결과는 캐시됩니다.
+// 동일한 입력에 대한 결과는 최대 1024개까지 캐시됩니다.
 // 지원 태그: [bold], [red], [bg-blue], [#ff4500], [color(208)], [bg-#ff4500], [bg-color(208)]
 func Markup(text string) string {
-	if cached, ok := markupCache.Load(text); ok {
-		return cached.(string)
+	// 마크업 태그가 없으면 파싱/캐싱 없이 즉시 원본 반환
+	if strings.IndexByte(text, '[') == -1 {
+		return text
 	}
+
+	mCache.mu.RLock()
+	if cached, ok := mCache.entries[text]; ok {
+		mCache.mu.RUnlock()
+		return cached
+	}
+	mCache.mu.RUnlock()
+
 	var result strings.Builder
 	runes := []rune(text)
 	inTag := false
@@ -273,10 +293,15 @@ func Markup(text string) string {
 	}
 
 	output := result.String()
-	// LoadOrStore: 동시에 같은 키가 들어와도 한 값만 저장됨
-	if actual, loaded := markupCache.LoadOrStore(text, output); loaded {
-		return actual.(string)
+
+	mCache.mu.Lock()
+	if len(mCache.entries) >= maxMarkupCacheSize {
+		// 상한 도달 시 맵 재할당하여 메모리 해제
+		mCache.entries = make(map[string]string)
 	}
+	mCache.entries[text] = output
+	mCache.mu.Unlock()
+
 	return output
 }
 

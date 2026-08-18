@@ -290,3 +290,132 @@ func TestRequiredFlagValidationDeterministic(t *testing.T) {
 		}
 	}
 }
+
+func TestFlagSet_Reset(t *testing.T) {
+	var strVal string
+	var intVal int
+	var boolVal bool
+	var listVal []string
+
+	fs := wcli.NewFlagSet()
+	fs.StringVar(&strVal, "name", "n", "default-name", "")
+	fs.IntVar(&intVal, "count", "c", 10, "")
+	fs.BoolVar(&boolVal, "verbose", "v", false, "")
+	fs.StringSliceVar(&listVal, "items", "i", []string{"a", "b"}, "")
+
+	// 1. 초기값 확인
+	if strVal != "default-name" || intVal != 10 || boolVal != false || len(listVal) != 2 {
+		t.Fatalf("초기값 불일치: str=%s int=%d bool=%v list=%v", strVal, intVal, boolVal, listVal)
+	}
+
+	// 2. 값 변경 파싱
+	_, err := fs.Parse([]string{"--name", "custom", "--count", "99", "--verbose", "--items", "c"})
+	if err != nil {
+		t.Fatalf("파싱 실패: %v", err)
+	}
+	if strVal != "custom" || intVal != 99 || boolVal != true || len(listVal) != 3 {
+		t.Fatalf("파싱 후 값 불일치: str=%s int=%d bool=%v list=%v", strVal, intVal, boolVal, listVal)
+	}
+	if !fs.Changed("name") || !fs.Changed("count") || !fs.Changed("verbose") || !fs.Changed("items") {
+		t.Fatalf("Changed 플래그 상태 불일치")
+	}
+
+	// 3. Reset 호출 후 기본값 복원 확인
+	fs.Reset()
+	if strVal != "default-name" || intVal != 10 || boolVal != false || len(listVal) != 2 {
+		t.Fatalf("Reset 후 값 복원 실패: str=%s int=%d bool=%v list=%v", strVal, intVal, boolVal, listVal)
+	}
+	if fs.Changed("name") || fs.Changed("count") || fs.Changed("verbose") || fs.Changed("items") {
+		t.Fatalf("Reset 후 Changed 상태가 false여야 함")
+	}
+}
+
+func TestCommand_ResetFlags(t *testing.T) {
+	var rootFlag string
+	var subFlag int
+
+	rootCmd := &wcli.Command{
+		Use: "app",
+		Run: func(ctx *wcli.Context) error { return nil },
+	}
+	rootCmd.PersistentFlags().StringVar(&rootFlag, "global", "g", "root-default", "")
+
+	subCmd := &wcli.Command{
+		Use: "sub",
+		Run: func(ctx *wcli.Context) error { return nil },
+	}
+	subCmd.Flags().IntVar(&subFlag, "port", "p", 8080, "")
+	rootCmd.AddCommand(subCmd)
+
+	// 1차 실행
+	if err := rootCmd.Execute([]string{"sub", "--global", "modified", "--port", "9090"}); err != nil {
+		t.Fatalf("1차 실행 실패: %v", err)
+	}
+	if rootFlag != "modified" || subFlag != 9090 {
+		t.Fatalf("1차 실행 값 불일치: global=%s port=%d", rootFlag, subFlag)
+	}
+
+	// ResetFlags 호출
+	rootCmd.ResetFlags()
+	if rootFlag != "root-default" || subFlag != 8080 {
+		t.Fatalf("ResetFlags 후 값 불일치: global=%s port=%d", rootFlag, subFlag)
+	}
+
+	// 2차 실행 (기본값 상태에서 실행 확인)
+	if err := rootCmd.Execute([]string{"sub"}); err != nil {
+		t.Fatalf("2차 실행 실패: %v", err)
+	}
+	if rootFlag != "root-default" || subFlag != 8080 {
+		t.Fatalf("2차 실행 값 불일치: global=%s port=%d", rootFlag, subFlag)
+	}
+}
+
+func TestFlagSet_DependencyInjection(t *testing.T) {
+	t.Parallel()
+
+	fs := wcli.NewFlagSet()
+	var host string
+	var port int
+
+	fs.StringVar(&host, "host", "h", "localhost", "서버 호스트")
+	fs.IntVar(&port, "port", "p", 80, "서버 포트")
+
+	fs.BindEnv("host", "APP_HOST")
+	fs.BindConfig("port", "server.port")
+
+	// Mock 환경변수 및 설정 주입
+	mockEnv := map[string]string{
+		"APP_HOST": "192.168.1.100",
+	}
+	fs.SetLookupEnv(func(key string) (string, bool) {
+		val, ok := mockEnv[key]
+		return val, ok
+	})
+
+	mockConfig := map[string]any{
+		"server.port": 9999,
+	}
+	fs.SetConfigGetter(func(key string) any {
+		return mockConfig[key]
+	})
+
+	// 빈 인자로 Parse 후 Validate 실행
+	rem, err := fs.Parse([]string{})
+	if err != nil {
+		t.Fatalf("Parse 실패: %v", err)
+	}
+	if len(rem) != 0 {
+		t.Fatalf("예상치 못한 남은 인자: %v", rem)
+	}
+
+	if err := fs.Validate(); err != nil {
+		t.Fatalf("Validate 실패: %v", err)
+	}
+
+	if host != "192.168.1.100" {
+		t.Fatalf("주입된 env 바인딩 실패. got: %s, want: 192.168.1.100", host)
+	}
+	if port != 9999 {
+		t.Fatalf("주입된 config 바인딩 실패. got: %d, want: 9999", port)
+	}
+}

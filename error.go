@@ -1,6 +1,9 @@
 package wcli
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+)
 
 // FlagError 플래그 파싱 또는 존재하지 않는 플래그 등 플래그 입력 구문 오류를 나타냅니다.
 type FlagError struct {
@@ -45,9 +48,41 @@ type CommandError struct {
 }
 
 func (e *CommandError) Error() string {
-	return fmt.Sprintf("command %q execution error: %v", e.CommandName, e.Err)
+	if e.CommandName != "" {
+		return fmt.Sprintf("command %q execution error: %v", e.CommandName, e.Err)
+	}
+	return fmt.Sprintf("command execution error: %v", e.Err)
 }
 
 func (e *CommandError) Unwrap() error {
+	return e.Err
+}
+
+// ConfigError 설정 로드, 파싱, 바인딩 오류를 나타냅니다.
+type ConfigError struct {
+	Path       string
+	ConfigType string
+	Key        string
+	Err        error
+}
+
+func (e *ConfigError) Error() string {
+	var parts []string
+	if e.Path != "" {
+		parts = append(parts, fmt.Sprintf("file %q", e.Path))
+	}
+	if e.ConfigType != "" {
+		parts = append(parts, fmt.Sprintf("type %q", e.ConfigType))
+	}
+	if e.Key != "" {
+		parts = append(parts, fmt.Sprintf("key %q", e.Key))
+	}
+	if len(parts) > 0 {
+		return fmt.Sprintf("config error (%s): %v", strings.Join(parts, ", "), e.Err)
+	}
+	return fmt.Sprintf("config error: %v", e.Err)
+}
+
+func (e *ConfigError) Unwrap() error {
 	return e.Err
 }

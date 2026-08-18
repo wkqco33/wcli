@@ -13,7 +13,7 @@
 
 ### 저장소 복제 및 준비
 ```bash
-git clone https://github.com/seoyc/wcli.git
+git clone https://github.com/wkqco33/wcli.git
 cd wcli
 
 # 전체 빌드 및 테스트 확인

@@ -48,6 +48,13 @@ func BenchmarkMarkup_TrueColor(b *testing.B) {
 	}
 }
 
+func BenchmarkMarkup_NoTag_PassThrough(b *testing.B) {
+	s := "일반 텍스트 로그 메시지 (2026-08-18 19:37:00 info message)"
+	for i := 0; i < b.N; i++ {
+		rich.Markup(s)
+	}
+}
+
 func BenchmarkTable_Render(b *testing.B) {
 	tbl := rich.NewTable("이름", "나이", "직업", "지역")
 	for i := 0; i < 100; i++ {

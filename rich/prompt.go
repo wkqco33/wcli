@@ -11,6 +11,11 @@ import (
 	"sync"
 )
 
+var (
+	isTerminalFDFunc       = isTerminalFD
+	readPasswordNoEchoFunc = readPasswordNoEcho
+)
+
 // PasswordPrompt 레이블을 출력하고 os.Stdin에서 에코 없이 비밀번호를 입력받습니다.
 // 터미널이 아닌 환경에서는 일반 입력으로 폴백합니다.
 func PasswordPrompt(label string) (string, error) {
@@ -21,8 +26,8 @@ func PasswordPrompt(label string) (string, error) {
 func FPasswordPrompt(out io.Writer, in io.Reader, label string) (string, error) {
 	Fprint(out, "%s: ", label)
 
-	if f, ok := in.(*os.File); ok && isTerminalFD(int(f.Fd())) {
-		return readPasswordNoEcho()
+	if f, ok := in.(*os.File); ok && isTerminalFDFunc(int(f.Fd())) {
+		return readPasswordNoEchoFunc()
 	}
 	return readLine(getLineReader(in))
 }

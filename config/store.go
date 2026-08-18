@@ -3,6 +3,7 @@ package config
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -17,10 +18,80 @@ type Store struct {
 // NewStore 새 설정 저장소 인스턴스를 생성합니다.
 func NewStore() *Store {
 	return &Store{
-		state: &configStore{
-			data: make(map[string]any),
-		},
+		state: newConfigStore(),
 	}
+}
+
+// SetLookupEnv 환경변수 조회 함수를 주입합니다 (테스트 격리 지원).
+func (s *Store) SetLookupEnv(fn func(string) (string, bool)) {
+	s.state.mu.Lock()
+	defer s.state.mu.Unlock()
+	if fn != nil {
+		s.state.lookupEnvFunc = fn
+	} else {
+		s.state.lookupEnvFunc = os.LookupEnv
+	}
+}
+
+// SetReadFileFunc 파일 읽기 함수를 주입합니다 (테스트 격리 지원).
+func (s *Store) SetReadFileFunc(fn func(string) ([]byte, error)) {
+	s.state.mu.Lock()
+	defer s.state.mu.Unlock()
+	if fn != nil {
+		s.state.readFileFunc = fn
+	} else {
+		s.state.readFileFunc = os.ReadFile
+	}
+}
+
+// SetStatFunc 파일 상태 조회 함수를 주입합니다 (테스트 격리 지원).
+func (s *Store) SetStatFunc(fn func(string) (os.FileInfo, error)) {
+	s.state.mu.Lock()
+	defer s.state.mu.Unlock()
+	if fn != nil {
+		s.state.statFunc = fn
+	} else {
+		s.state.statFunc = os.Stat
+	}
+}
+
+// SetUserHomeDirFunc 홈 디렉터리 조회 함수를 주입합니다 (테스트 격리 지원).
+func (s *Store) SetUserHomeDirFunc(fn func() (string, error)) {
+	s.state.mu.Lock()
+	defer s.state.mu.Unlock()
+	if fn != nil {
+		s.state.userHomeDirFunc = fn
+	} else {
+		s.state.userHomeDirFunc = os.UserHomeDir
+	}
+}
+
+func (s *Store) getLookupEnv() func(string) (string, bool) {
+	if s.state.lookupEnvFunc != nil {
+		return s.state.lookupEnvFunc
+	}
+	return os.LookupEnv
+}
+
+func (s *Store) getReadFile() func(string) ([]byte, error) {
+	if s.state.readFileFunc != nil {
+		return s.state.readFileFunc
+	}
+	return os.ReadFile
+}
+
+func (s *Store) getStat() func(string) (os.FileInfo, error) {
+	if s.state.statFunc != nil {
+		return s.state.statFunc
+	}
+	return os.Stat
+}
+
+func (s *Store) getUserHomeDir() func() (string, error) {
+	if s.state.userHomeDirFunc != nil {
+		return s.state.userHomeDirFunc
+	}
+	return os.UserHomeDir
 }
 
 func (s *Store) SetConfigFile(path string) {
@@ -86,7 +157,8 @@ func (s *Store) ReadInConfig() error {
 		return fmt.Errorf("config file path is not set")
 	}
 
-	content, err := readFileFunc(s.state.configPath)
+	readFile := s.getReadFile()
+	content, err := readFile(s.state.configPath)
 	if err != nil {
 		return fmt.Errorf("read config file error: %w", err)
 	}
@@ -120,6 +192,41 @@ func (s *Store) ReloadConfig() error {
 	return s.ReadInConfig()
 }
 
+func (s *Store) AutoDiscoverConfig(appName string, extraPaths ...string) error {
+	candidates := make([]string, 0, len(extraPaths)+len(configExtensions)*2)
+
+	// 1. 사용자 지정 경로
+	candidates = append(candidates, extraPaths...)
+
+	// 2. ./config.*
+	for _, ext := range configExtensions {
+		candidates = append(candidates, "config"+ext)
+	}
+
+	// 3. ~/.appname.*
+	userHome := s.getUserHomeDir()
+	if home, err := userHome(); err == nil {
+		for _, ext := range configExtensions {
+			candidates = append(candidates, filepath.Join(home, "."+appName+ext))
+		}
+	}
+
+	// 4. /etc/appname/config.*
+	for _, ext := range configExtensions {
+		candidates = append(candidates, filepath.Join("/etc", appName, "config"+ext))
+	}
+
+	stat := s.getStat()
+	for _, path := range candidates {
+		if _, err := stat(path); err == nil {
+			s.SetConfigFile(path)
+			return s.ReadInConfig()
+		}
+	}
+
+	return fmt.Errorf("config file not found (app: %s)", appName)
+}
+
 func (s *Store) Get(key string) any {
 	s.state.mu.RLock()
 	defer s.state.mu.RUnlock()
@@ -129,7 +236,8 @@ func (s *Store) Get(key string) any {
 		if s.state.envPrefix != "" {
 			envKey = s.state.envPrefix + "_" + envKey
 		}
-		if envVal, exists := lookupEnvFunc(envKey); exists {
+		lookup := s.getLookupEnv()
+		if envVal, exists := lookup(envKey); exists {
 			return envVal
 		}
 	}

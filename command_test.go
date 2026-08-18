@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/wkqco33/wcli"
+	"github.com/wkqco33/wcli/internal/testutil"
 )
 
 func TestCommandName(t *testing.T) {
@@ -24,9 +25,7 @@ func TestCommandName(t *testing.T) {
 	}
 	for _, tt := range tests {
 		cmd := &wcli.Command{Use: tt.use}
-		if got := cmd.Name(); got != tt.expected {
-			t.Errorf("Name() for Use=%q = %q, want %q", tt.use, got, tt.expected)
-		}
+		testutil.AssertEqual(t, cmd.Name(), tt.expected)
 	}
 }
 
@@ -46,32 +45,21 @@ func TestCommandAliases(t *testing.T) {
 	for _, name := range []string{"server", "serve", "s"} {
 		ran = false
 		err := root.Execute([]string{name})
-		if err != nil {
-			t.Errorf("alias %q 실행 실패: %v", name, err)
-		}
-		if !ran {
-			t.Errorf("alias %q 로 Run이 실행되지 않음", name)
-		}
+		testutil.AssertNoErrorf(t, err, "alias %q 실행 실패", name)
+		testutil.AssertTruef(t, ran, "alias %q 로 Run이 실행되지 않음", name)
 	}
 }
 
 func TestOutWriter(t *testing.T) {
-	var buf bytes.Buffer
 	cmd := &wcli.Command{
-		Use:       "testapp",
-		Short:     "test",
-		OutWriter: &buf,
-		Run:       func(ctx *wcli.Context) error { return nil },
+		Use:   "testapp",
+		Short: "test",
+		Run:   func(ctx *wcli.Context) error { return nil },
 	}
 
-	err := cmd.Execute([]string{"--help"})
-	if err != nil {
-		t.Fatalf("--help 실행 실패: %v", err)
-	}
-	output := buf.String()
-	if !strings.Contains(output, "Usage:") {
-		t.Errorf("OutWriter로 출력된 도움말에 'Usage:'가 없음. 출력: %q", output)
-	}
+	stdout, _, err := testutil.ExecuteCommand(cmd, "--help")
+	testutil.AssertNoError(t, err)
+	testutil.AssertContains(t, stdout, "Usage:")
 }
 
 // TestSubCommandInheritsWriter 하위 커맨드가 부모의 OutWriter를 상속하되,

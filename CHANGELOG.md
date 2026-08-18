@@ -3,6 +3,25 @@
 모든 주요 변경 사항은 이 파일에 기록됩니다.
 이 프로젝트는 [Semantic Versioning](https://semver.org/spec/v2.0.0.html) 및 [Keep a Changelog](https://keepachangelog.com/ko/1.0.0/) 형식을 준수합니다.
 
+## [v0.2.0] - 2026-08-18
+
+### 추가 (Added)
+- **TDD 경량 테스트 하네스 (`internal/testutil`)**
+  - 표준 출력/에러 버퍼 자동 캡처 실행 헬퍼 (`ExecuteCommand`)
+  - Go 표준 `t.Helper()` 기반 제로 디펜던시 단언 헬퍼 (`AssertEqual`, `AssertContains`, `AssertErrorIs`, `AssertErrorAs`, `AssertTrue`, `AssertLen` 등)
+- **인스턴스 기반 의존성 주입(DI) 및 병렬 테스트(`t.Parallel()`) 지원**
+  - `FlagSet` 환경변수 조회(`SetLookupEnv`) 및 설정 조회(`SetConfigGetter`) 주입 지원
+  - `config.Store` 환경변수/파일 읽기/스탯 함수 주입 지원
+  - `rich` 패키지 테스트용 터미널/비밀번호 판독 훅 지원
+- **에러 스키마 확장**
+  - 설정 로드/파싱 오류 표현을 위한 `ConfigError` 구조체 추가
+- **TDD 워크플로우 및 가이드**
+  - `Taskfile.yml`에 TDD 태스크 (`test:fast`, `test:parallel`, `test:watch`) 추가
+  - `AGENTS.md` 작성 (개발 철학, TDD 표준 작성법, 검증 태스크, 릴리스 규칙 단일화)
+
+### 변경 (Changed)
+- `config` 패키지의 패키지 레벨 함수들을 `Store` 인스턴스 위임으로 일원화하여 코드 중복 제거 및 유지보수성 향상
+
 ## [v0.1.0] - 2026-08-15
 
 ### 추가 (Added)

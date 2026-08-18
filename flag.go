@@ -11,8 +11,6 @@ import (
 	"github.com/wkqco33/wcli/config"
 )
 
-var lookupEnv = os.LookupEnv
-
 // FlagType 플래그 값의 타입을 정의
 type FlagType int
 
@@ -42,6 +40,14 @@ type Flag struct {
 	valueDuration    *time.Duration
 	valueStringSlice *[]string
 
+	// 기본값 저장 (Reset용)
+	defaultStr         string
+	defaultInt         int
+	defaultBool        bool
+	defaultFloat64     float64
+	defaultDuration    time.Duration
+	defaultStringSlice []string
+
 	required  bool               // MarkRequired로 설정
 	validate  func(string) error // SetValidation으로 설정
 	wasSet    bool               // Parse 후 실제로 값이 설정됐는지 여부
@@ -56,14 +62,50 @@ type FlagSet struct {
 	sorted           []*Flag          // All() 정렬 캐시 (addFlag/merge 호출 시 무효화)
 	exclusiveGroups  [][]string       // 상호 배제 플래그 그룹 목록
 	requiredTogether [][]string       // 필수 동반 지정 플래그 그룹 목록
+	lookupEnv        func(string) (string, bool)
+	configGetter     func(string) any
 }
 
 // NewFlagSet 새로운 FlagSet을 생성
 func NewFlagSet() *FlagSet {
 	return &FlagSet{
-		flags:  make(map[string]*Flag),
-		shorts: make(map[string]*Flag),
+		flags:        make(map[string]*Flag),
+		shorts:       make(map[string]*Flag),
+		lookupEnv:    os.LookupEnv,
+		configGetter: config.Get,
 	}
+}
+
+// SetLookupEnv 환경변수 조회 함수를 주입합니다 (테스트 격리 및 모킹 지원).
+func (f *FlagSet) SetLookupEnv(fn func(string) (string, bool)) {
+	if fn != nil {
+		f.lookupEnv = fn
+	} else {
+		f.lookupEnv = os.LookupEnv
+	}
+}
+
+// SetConfigGetter 설정 값 조회 함수를 주입합니다 (테스트 격리 및 모킹 지원).
+func (f *FlagSet) SetConfigGetter(fn func(string) any) {
+	if fn != nil {
+		f.configGetter = fn
+	} else {
+		f.configGetter = config.Get
+	}
+}
+
+func (f *FlagSet) getLookupEnv() func(string) (string, bool) {
+	if f.lookupEnv != nil {
+		return f.lookupEnv
+	}
+	return os.LookupEnv
+}
+
+func (f *FlagSet) getConfigGetter() func(string) any {
+	if f.configGetter != nil {
+		return f.configGetter
+	}
+	return config.Get
 }
 
 // addFlag 플래그를 세트에 등록. 같은 이름/단축키가 이미 등록돼 있으면 panic합니다(개발 단계 실수 방지).
@@ -166,6 +208,9 @@ func (f *FlagSet) MarkFlagsRequiredTogether(names ...string) {
 
 // Validate required 플래그 누락 및 검증 함수 실행을 확인합니다.
 func (f *FlagSet) Validate() error {
+	lookup := f.getLookupEnv()
+	configGet := f.getConfigGetter()
+
 	// 1. 환경변수 및 설정파일 바인딩 처리 (우선순위 체인)
 	for _, flag := range f.flags {
 		if flag.wasSet {
@@ -174,7 +219,7 @@ func (f *FlagSet) Validate() error {
 
 		// (1) 환경변수 바인딩 검사 및 설정
 		if flag.envName != "" {
-			if val, exists := lookupEnv(flag.envName); exists {
+			if val, exists := lookup(flag.envName); exists {
 				if err := f.setFlagValue(flag, val, fmt.Sprintf("env %s", flag.envName)); err != nil {
 					return err
 				}
@@ -184,7 +229,7 @@ func (f *FlagSet) Validate() error {
 
 		// (2) 설정파일 바인딩 검사 및 설정
 		if flag.configKey != "" {
-			if val := config.Get(flag.configKey); val != nil {
+			if val := configGet(flag.configKey); val != nil {
 				if err := f.setConfigFlagValue(flag, val, fmt.Sprintf("config %s", flag.configKey)); err != nil {
 					return err
 				}
@@ -271,6 +316,12 @@ func (f *FlagSet) merge(other *FlagSet) {
 	// 그룹 제약(상호 배제/필수 동반)도 함께 병합해야 combined FlagSet의 Validate()에서 검증됨
 	f.exclusiveGroups = append(f.exclusiveGroups, other.exclusiveGroups...)
 	f.requiredTogether = append(f.requiredTogether, other.requiredTogether...)
+	if other.lookupEnv != nil {
+		f.lookupEnv = other.lookupEnv
+	}
+	if other.configGetter != nil {
+		f.configGetter = other.configGetter
+	}
 	f.sorted = nil // 정렬 캐시 무효화
 }
 
@@ -283,6 +334,7 @@ func (f *FlagSet) StringVar(p *string, name, shorthand, value, usage string) {
 		Usage:      usage,
 		Type:       TypeString,
 		DefaultVal: value,
+		defaultStr: value,
 		valueStr:   p,
 	})
 }
@@ -296,6 +348,7 @@ func (f *FlagSet) IntVar(p *int, name, shorthand string, value int, usage string
 		Usage:      usage,
 		Type:       TypeInt,
 		DefaultVal: strconv.Itoa(value),
+		defaultInt: value,
 		valueInt:   p,
 	})
 }
@@ -304,11 +357,12 @@ func (f *FlagSet) IntVar(p *int, name, shorthand string, value int, usage string
 func (f *FlagSet) BoolVar(p *bool, name, shorthand string, value bool, usage string) {
 	*p = value
 	f.addFlag(&Flag{
-		Name:      name,
-		Shorthand: shorthand,
-		Usage:     usage,
-		Type:      TypeBool,
-		valueBool: p,
+		Name:        name,
+		Shorthand:   shorthand,
+		Usage:       usage,
+		Type:        TypeBool,
+		defaultBool: value,
+		valueBool:   p,
 	})
 }
 
@@ -316,12 +370,13 @@ func (f *FlagSet) BoolVar(p *bool, name, shorthand string, value bool, usage str
 func (f *FlagSet) Float64Var(p *float64, name, shorthand string, value float64, usage string) {
 	*p = value
 	f.addFlag(&Flag{
-		Name:         name,
-		Shorthand:    shorthand,
-		Usage:        usage,
-		Type:         TypeFloat64,
-		DefaultVal:   strconv.FormatFloat(value, 'f', -1, 64),
-		valueFloat64: p,
+		Name:           name,
+		Shorthand:      shorthand,
+		Usage:          usage,
+		Type:           TypeFloat64,
+		DefaultVal:     strconv.FormatFloat(value, 'f', -1, 64),
+		defaultFloat64: value,
+		valueFloat64:   p,
 	})
 }
 
@@ -329,30 +384,73 @@ func (f *FlagSet) Float64Var(p *float64, name, shorthand string, value float64, 
 func (f *FlagSet) DurationVar(p *time.Duration, name, shorthand string, value time.Duration, usage string) {
 	*p = value
 	f.addFlag(&Flag{
-		Name:          name,
-		Shorthand:     shorthand,
-		Usage:         usage,
-		Type:          TypeDuration,
-		DefaultVal:    value.String(),
-		valueDuration: p,
+		Name:            name,
+		Shorthand:       shorthand,
+		Usage:           usage,
+		Type:            TypeDuration,
+		DefaultVal:      value.String(),
+		defaultDuration: value,
+		valueDuration:   p,
 	})
 }
 
 // StringSliceVar 문자열 슬라이스 플래그 등록 (--flag val1 --flag val2 형식으로 누적)
 func (f *FlagSet) StringSliceVar(p *[]string, name, shorthand string, value []string, usage string) {
-	*p = value
+	*p = append([]string(nil), value...)
 	defaultVal := ""
 	if len(value) > 0 {
 		defaultVal = "[" + strings.Join(value, ",") + "]"
 	}
 	f.addFlag(&Flag{
-		Name:             name,
-		Shorthand:        shorthand,
-		Usage:            usage,
-		Type:             TypeStringSlice,
-		DefaultVal:       defaultVal,
-		valueStringSlice: p,
+		Name:               name,
+		Shorthand:          shorthand,
+		Usage:              usage,
+		Type:               TypeStringSlice,
+		DefaultVal:         defaultVal,
+		defaultStringSlice: append([]string(nil), value...),
+		valueStringSlice:   p,
 	})
+}
+
+// reset 플래그의 상태를 초기 등록 당시의 기본값으로 복원합니다.
+func (f *Flag) reset() {
+	f.wasSet = false
+	switch f.Type {
+	case TypeString:
+		if f.valueStr != nil {
+			*f.valueStr = f.defaultStr
+		}
+	case TypeInt:
+		if f.valueInt != nil {
+			*f.valueInt = f.defaultInt
+		}
+	case TypeBool:
+		if f.valueBool != nil {
+			*f.valueBool = f.defaultBool
+		}
+	case TypeFloat64:
+		if f.valueFloat64 != nil {
+			*f.valueFloat64 = f.defaultFloat64
+		}
+	case TypeDuration:
+		if f.valueDuration != nil {
+			*f.valueDuration = f.defaultDuration
+		}
+	case TypeStringSlice:
+		if f.valueStringSlice != nil {
+			*f.valueStringSlice = append([]string(nil), f.defaultStringSlice...)
+		}
+	}
+}
+
+// Reset 등록된 모든 플래그의 wasSet 상태를 false로 초기화하고 바인딩된 변수 값을 초기 기본값으로 복원합니다.
+func (f *FlagSet) Reset() {
+	if f == nil {
+		return
+	}
+	for _, flag := range f.flags {
+		flag.reset()
+	}
 }
 
 // Parse 인자를 파싱하여 플래그 값을 바인딩하고 남은 인자를 반환

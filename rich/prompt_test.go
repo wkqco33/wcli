@@ -2,6 +2,7 @@ package rich_test
 
 import (
 	"bytes"
+	"os"
 	"strings"
 	"testing"
 
@@ -146,5 +147,23 @@ func TestFPasswordPrompt(t *testing.T) {
 	}
 	if result != "mysecret" {
 		t.Errorf("비밀번호 값 기대: mysecret, 실제: %q", result)
+	}
+}
+
+func TestFPasswordPrompt_TerminalMode(t *testing.T) {
+	cleanup := rich.SetTerminalHooksForTesting(
+		func(fd int) bool { return true },
+		func() (string, error) { return "mock-masked-secret", nil },
+	)
+	defer cleanup()
+
+	var out bytes.Buffer
+	// os.Stdin을 전달해도 mock 훅이 가로챔
+	result, err := rich.FPasswordPrompt(&out, os.Stdin, "비밀번호")
+	if err != nil {
+		t.Fatalf("FPasswordPrompt 오류: %v", err)
+	}
+	if result != "mock-masked-secret" {
+		t.Errorf("터미널 모드 패스워드 반환 기대: mock-masked-secret, 실제: %q", result)
 	}
 }

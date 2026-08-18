@@ -67,3 +67,30 @@ func TestCommandError(t *testing.T) {
 		t.Errorf("expected Unwrap to yield origErr")
 	}
 }
+
+func TestConfigError(t *testing.T) {
+	origErr := errors.New("key not found")
+	err := &ConfigError{
+		Path:       "config.yaml",
+		ConfigType: "yaml",
+		Key:        "db.port",
+		Err:        origErr,
+	}
+
+	expectedStr := `config error (file "config.yaml", type "yaml", key "db.port"): key not found`
+	if err.Error() != expectedStr {
+		t.Errorf("expected %q, got %q", expectedStr, err.Error())
+	}
+
+	if !errors.Is(err, origErr) {
+		t.Errorf("expected Unwrap to yield origErr")
+	}
+
+	errSimple := &ConfigError{
+		Err: origErr,
+	}
+	expectedSimpleStr := `config error: key not found`
+	if errSimple.Error() != expectedSimpleStr {
+		t.Errorf("expected %q, got %q", expectedSimpleStr, errSimple.Error())
+	}
+}

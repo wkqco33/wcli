@@ -49,19 +49,80 @@ func GenBashCompletion(cmd *Command, w io.Writer) error {
 
 	// 기본 bash 완성 핸들러 작성
 	fmt.Fprintf(&b, "_%s_bash_autocomplete() {\n", name)
-	fmt.Fprintln(&b, "    local cur prev opts")
+	fmt.Fprintln(&b, "    local cur prev cword opts")
 	fmt.Fprintln(&b, "    COMPREPLY=()")
 	fmt.Fprintln(&b, "    cur=\"${COMP_WORDS[COMP_CWORD]}\"")
 	fmt.Fprintln(&b, "    prev=\"${COMP_WORDS[COMP_CWORD-1]}\"")
+	fmt.Fprintln(&b, "    cword=${COMP_CWORD}")
 	fmt.Fprintln(&b)
 
-	// 계층 분석 없이 모든 명령어와 플래그를 편평하게 후보군으로 추출 (성능 및 제로 의존성 준수)
-	var allWords []string
-	collectAllWords(cmd, &allWords)
-	optsStr := strings.Join(allWords, " ")
+	if len(cmd.commands) > 0 {
+		fmt.Fprintln(&b, "    local subcmd=\"\"")
+		fmt.Fprintln(&b, "    local i")
+		fmt.Fprintln(&b, "    for ((i=1; i < cword; i++)); do")
+		fmt.Fprintln(&b, "        local w=\"${COMP_WORDS[i]}\"")
+		fmt.Fprintln(&b, "        if [[ \"${w}\" != -* ]]; then")
+		fmt.Fprintln(&b, "            subcmd=\"${w}\"")
+		fmt.Fprintln(&b, "            break")
+		fmt.Fprintln(&b, "        fi")
+		fmt.Fprintln(&b, "    done")
+		fmt.Fprintln(&b)
+		fmt.Fprintln(&b, "    case \"${subcmd}\" in")
 
-	fmt.Fprintf(&b, "    opts=\"%s\"\n", optsStr)
-	fmt.Fprintln(&b, "    COMPREPLY=( $(compgen -W \"${opts}\" -- ${cur}) )")
+		for _, sub := range cmd.commands {
+			var patterns []string
+			patterns = append(patterns, sub.Name())
+			patterns = append(patterns, sub.Aliases...)
+			patternStr := strings.Join(patterns, "|")
+
+			var subOpts []string
+			for _, sf := range sub.ownFlags() {
+				subOpts = append(subOpts, "--"+sf.Name)
+				if sf.Shorthand != "" {
+					subOpts = append(subOpts, "-"+sf.Shorthand)
+				}
+			}
+			for _, child := range sub.commands {
+				subOpts = append(subOpts, child.Name())
+				subOpts = append(subOpts, child.Aliases...)
+			}
+			if len(subOpts) > 0 {
+				fmt.Fprintf(&b, "        %s)\n", patternStr)
+				fmt.Fprintf(&b, "            opts=\"%s\"\n", strings.Join(subOpts, " "))
+				fmt.Fprintln(&b, "            ;;")
+			}
+		}
+
+		// 루트 레벨 옵션 (서브커맨드 목록 + 루트 플래그)
+		var rootOpts []string
+		for _, sub := range cmd.commands {
+			rootOpts = append(rootOpts, sub.Name())
+			rootOpts = append(rootOpts, sub.Aliases...)
+		}
+		for _, f := range cmd.ownFlags() {
+			rootOpts = append(rootOpts, "--"+f.Name)
+			if f.Shorthand != "" {
+				rootOpts = append(rootOpts, "-"+f.Shorthand)
+			}
+		}
+
+		fmt.Fprintln(&b, "        *)")
+		fmt.Fprintf(&b, "            opts=\"%s\"\n", strings.Join(rootOpts, " "))
+		fmt.Fprintln(&b, "            ;;")
+		fmt.Fprintln(&b, "    esac")
+	} else {
+		var rootOpts []string
+		for _, f := range cmd.ownFlags() {
+			rootOpts = append(rootOpts, "--"+f.Name)
+			if f.Shorthand != "" {
+				rootOpts = append(rootOpts, "-"+f.Shorthand)
+			}
+		}
+		fmt.Fprintf(&b, "    opts=\"%s\"\n", strings.Join(rootOpts, " "))
+	}
+
+	fmt.Fprintln(&b)
+	fmt.Fprintln(&b, "    COMPREPLY=( $(compgen -W \"${opts}\" -- \"${cur}\") )")
 	fmt.Fprintln(&b, "    return 0")
 	fmt.Fprintln(&b, "}")
 	fmt.Fprintf(&b, "complete -F _%s_bash_autocomplete %s\n", name, name)
@@ -193,49 +254,6 @@ func GenFishCompletion(cmd *Command, w io.Writer) error {
 // escapeFishDesc fish complete -d 인수의 작은따옴표 이스케이프
 func escapeFishDesc(s string) string {
 	return strings.ReplaceAll(s, "'", "\\'")
-}
-
-func collectAllWords(cmd *Command, words *[]string) {
-	// 중복 방지를 위한 맵
-	visited := make(map[string]bool)
-
-	var collect func(c *Command)
-	collect = func(c *Command) {
-		name := c.Name()
-		if name != "" && !visited[name] {
-			visited[name] = true
-			*words = append(*words, name)
-		}
-		for _, alias := range c.Aliases {
-			if !visited[alias] {
-				visited[alias] = true
-				*words = append(*words, alias)
-			}
-		}
-
-		// 플래그 이름 수집
-		flags := c.ownFlags()
-		for _, f := range flags {
-			nameKey := "--" + f.Name
-			if !visited[nameKey] {
-				visited[nameKey] = true
-				*words = append(*words, nameKey)
-			}
-			if f.Shorthand != "" {
-				shKey := "-" + f.Shorthand
-				if !visited[shKey] {
-					visited[shKey] = true
-					*words = append(*words, shKey)
-				}
-			}
-		}
-
-		for _, sub := range c.commands {
-			collect(sub)
-		}
-	}
-
-	collect(cmd)
 }
 
 func escapeZshUsage(s string) string {

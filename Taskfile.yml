@@ -1,7 +1,7 @@
 version: '3'
 
 vars:
-  MODULE: github.com/seoyc/wcli
+  MODULE: github.com/wkqco33/wcli
   BINARY_NAME: wcli
   BIN_DIR: ./bin
   GOBIN:
@@ -54,10 +54,36 @@ tasks:
     cmds:
       - go test -v ./...
 
+  test:fast:
+    aliases: [tf]
+    desc: 캐시 없이 전체 단위 테스트 초고속 실행 (TDD 피드백용)
+    cmds:
+      - go test -count=1 ./...
+
+  test:parallel:
+    aliases: [tp]
+    desc: 동시 병렬 실행 및 레이스 컨디션 정밀 검증
+    cmds:
+      - go test -race -parallel=8 -count=1 ./...
+
   test-race:
     desc: 전체 테스트 실행 (경쟁 상태 검지기 적용)
     cmds:
       - go test -race ./...
+
+  test:watch:
+    desc: TDD 워치 모드 (gow 또는 entr 설치 시 자동 실행)
+    cmds:
+      - |
+        if command -v gow >/dev/null 2>&1; then
+          gow -c test ./...
+        elif command -v entr >/dev/null 2>&1; then
+          find . -name "*.go" | entr -c go test ./...
+        else
+          echo "워치 도구(gow 또는 entr)가 설치되어 있지 않습니다."
+          echo "gow 설치: go install github.com/mitranim/gow@latest"
+          go test -v ./...
+        fi
 
   bench:
     desc: 벤치마크 실행
@@ -112,6 +138,7 @@ tasks:
     desc: 린터 실행 (staticcheck 또는 golangci-lint)
     cmds:
       - |
+        export PATH="$PATH:$(go env GOPATH)/bin"
         if command -v staticcheck >/dev/null 2>&1; then
           staticcheck ./...
         elif command -v golangci-lint >/dev/null 2>&1; then

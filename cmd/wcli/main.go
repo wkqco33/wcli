@@ -366,10 +366,10 @@ func runDoctor() []checkResult {
 		results = append(results, checkResult{"go.mod 존재", "fail", "go.mod 없음"})
 	} else {
 		results = append(results, checkResult{"go.mod 존재", "ok", "go.mod 발견"})
-		if strings.Contains(string(goModContent), "seoyc/wcli") {
+		if strings.Contains(string(goModContent), "wkqco33/wcli") {
 			results = append(results, checkResult{"wcli 의존성", "ok", "go.mod에 wcli 의존성 포함"})
 		} else {
-			results = append(results, checkResult{"wcli 의존성", "warn", "go.mod에 seoyc/wcli 의존성이 없습니다"})
+			results = append(results, checkResult{"wcli 의존성", "warn", "go.mod에 wkqco33/wcli 의존성이 없습니다"})
 		}
 
 		// 3. replace 경로 유효성 검사

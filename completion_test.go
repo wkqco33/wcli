@@ -108,8 +108,10 @@ func TestGenBashCompletion_Basic(t *testing.T) {
 	for _, want := range []string{
 		"_myapp_bash_autocomplete()",
 		`complete -F _myapp_bash_autocomplete myapp`,
-		"deploy",
-		"status",
+		`case "${subcmd}" in`,
+		"deploy)",
+		"opts=\"--dry-run --env -e\"",
+		"opts=\"deploy status\"",
 		"--env",
 		"--dry-run",
 		"-e",
@@ -117,6 +119,25 @@ func TestGenBashCompletion_Basic(t *testing.T) {
 		if !strings.Contains(out, want) {
 			t.Errorf("bash completion 출력에 %q 없음: %q", want, out)
 		}
+	}
+}
+
+func TestGenBashCompletion_NoSubCommands(t *testing.T) {
+	root := &wcli.Command{Use: "single"}
+	var verbose bool
+	root.Flags().BoolVar(&verbose, "verbose", "v", false, "상세 출력")
+
+	var buf strings.Builder
+	if err := wcli.GenBashCompletion(root, &buf); err != nil {
+		t.Fatalf("GenBashCompletion 오류: %v", err)
+	}
+	out := buf.String()
+
+	if !strings.Contains(out, `opts="--verbose -v"`) {
+		t.Errorf("단일 커맨드 옵션 출력 불일치: %q", out)
+	}
+	if strings.Contains(out, `case "${subcmd}" in`) {
+		t.Errorf("서브커맨드가 없는데 case 분기가 포함됨: %q", out)
 	}
 }
 

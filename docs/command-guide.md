@@ -281,7 +281,7 @@ if err := cmd.Execute(os.Args[1:]); err != nil {
 성능 최우선 원칙에 따라 설계된 경량 로거 서브패키지 `logging`을 제공합니다.
 
 ```go
-import "github.com/seoyc/wcli/logging"
+import "github.com/wkqco33/wcli/logging"
 
 func main() {
     logger := logging.NewDefaultLogger(os.Stderr, logging.LevelInfo, true)

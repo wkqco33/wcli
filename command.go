@@ -141,6 +141,19 @@ func (c *Command) FlagsChanged(name string) bool {
 	return false
 }
 
+// ResetFlags 이 커맨드 및 모든 하위 커맨드의 플래그 상태를 등록 당시의 기본값으로 재설정합니다.
+func (c *Command) ResetFlags() {
+	if c.flags != nil {
+		c.flags.Reset()
+	}
+	if c.persistentFlags != nil {
+		c.persistentFlags.Reset()
+	}
+	for _, sub := range c.commands {
+		sub.ResetFlags()
+	}
+}
+
 // AddCommand 하위 명령어를 추가
 func (c *Command) AddCommand(cmds ...*Command) {
 	if c.commandMap == nil {
@@ -215,22 +228,24 @@ func (c *Command) execute(ctx *Context) error {
 		}
 	}
 
-	// 2. --version 플래그 확인
-	if c.Version != "" && c.isVersionRequested(ctx.Args) {
+	// 2. 플래그 셋을 1회만 빌드하여 버전/도움말 검사 및 파싱에 재사용
+	combined := c.buildCombinedFlagSet()
+
+	// 3. --version 플래그 확인
+	if c.Version != "" && c.isVersionRequested(combined, ctx.Args) {
 		logger.Log(logging.LevelDebug, "Version flag detected on command %q", c.Name())
 		fmt.Fprintln(c.outWriter(), c.Version)
 		return ErrHelp
 	}
 
-	// 3. -h, --help 플래그 확인 (플래그 값 오탐 방지)
-	if c.isHelpRequested(ctx.Args) {
+	// 4. -h, --help 플래그 확인 (플래그 값 오탐 방지)
+	if c.isHelpRequested(combined, ctx.Args) {
 		logger.Log(logging.LevelDebug, "Help flag detected on command %q", c.Name())
 		c.help(c.outWriter())
 		return ErrHelp
 	}
 
-	// 4. 플래그 파싱 (조상의 persistent + 자신의 persistent + 로컬)
-	combined := c.buildCombinedFlagSet()
+	// 5. 플래그 파싱 (조상의 persistent + 자신의 persistent + 로컬)
 	if combined != nil {
 		logger.Log(logging.LevelDebug, "Parsing flags for command %q", c.Name())
 		remainingArgs, err := combined.Parse(ctx.Args)
@@ -249,7 +264,7 @@ func (c *Command) execute(ctx *Context) error {
 		ctx.Args = remainingArgs
 	}
 
-	// 5. PersistentPreRun 훅 실행 (루트 → 현재 순서)
+	// 6. PersistentPreRun 훅 실행 (루트 → 현재 순서)
 	for _, hook := range c.collectPersistentPreRuns() {
 		logger.Log(logging.LevelDebug, "Running PersistentPreRun for command %q", c.Name())
 		if err := hook(ctx); err != nil {
@@ -257,7 +272,7 @@ func (c *Command) execute(ctx *Context) error {
 		}
 	}
 
-	// 6. PreRun 훅 실행
+	// 7. PreRun 훅 실행
 	if c.PreRun != nil {
 		logger.Log(logging.LevelDebug, "Running PreRun for command %q", c.Name())
 		if err := c.PreRun(ctx); err != nil {
@@ -265,7 +280,7 @@ func (c *Command) execute(ctx *Context) error {
 		}
 	}
 
-	// 7. 명령어 실행
+	// 8. 명령어 실행
 	if c.Run != nil {
 		logger.Log(logging.LevelDebug, "Running main function for command %q", c.Name())
 		if err := c.Run(ctx); err != nil {
@@ -280,7 +295,7 @@ func (c *Command) execute(ctx *Context) error {
 		return &CommandError{CommandName: c.Name(), Err: fmt.Errorf("no Run function defined for command: %s", c.Use)}
 	}
 
-	// 8. PostRun 훅 실행
+	// 9. PostRun 훅 실행
 	if c.PostRun != nil {
 		logger.Log(logging.LevelDebug, "Running PostRun for command %q", c.Name())
 		if err := c.PostRun(ctx); err != nil {
@@ -288,7 +303,7 @@ func (c *Command) execute(ctx *Context) error {
 		}
 	}
 
-	// 9. PersistentPostRun 훅 실행 (현재 → 루트 순서)
+	// 10. PersistentPostRun 훅 실행 (현재 → 루트 순서)
 	for _, hook := range c.collectPersistentPostRuns() {
 		logger.Log(logging.LevelDebug, "Running PersistentPostRun for command %q", c.Name())
 		if err := hook(ctx); err != nil {
@@ -373,24 +388,23 @@ func (c *Command) collectPersistentPostRuns() []func(*Context) error {
 
 // isVersionRequested args에서 --version 플래그를 감지합니다.
 // 비-bool 플래그의 값으로 사용된 경우는 무시합니다.
-func (c *Command) isVersionRequested(args []string) bool {
-	return c.scanForFlag(args, func(arg string) bool {
+func (c *Command) isVersionRequested(combined *FlagSet, args []string) bool {
+	return c.scanForFlag(combined, args, func(arg string) bool {
 		return arg == "--version"
 	})
 }
 
 // isHelpRequested args에서 -h/--help 플래그를 감지합니다.
 // 비-bool 플래그의 값으로 사용된 경우는 무시합니다.
-func (c *Command) isHelpRequested(args []string) bool {
-	return c.scanForFlag(args, func(arg string) bool {
+func (c *Command) isHelpRequested(combined *FlagSet, args []string) bool {
+	return c.scanForFlag(combined, args, func(arg string) bool {
 		return arg == "-h" || arg == "--help"
 	})
 }
 
 // scanForFlag args를 순회하며 match가 true를 반환하는 인자가 있는지 확인합니다.
 // `--` 종결자 이후는 무시하고, 비-bool 플래그의 값으로 소비되는 토큰도 건너뜁니다.
-func (c *Command) scanForFlag(args []string, match func(arg string) bool) bool {
-	combined := c.buildCombinedFlagSet()
+func (c *Command) scanForFlag(combined *FlagSet, args []string, match func(arg string) bool) bool {
 	skipNext := false
 	for _, arg := range args {
 		if skipNext {

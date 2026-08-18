@@ -44,7 +44,7 @@ wcli doctor
 |---|---|
 | main.go 존재 | wcli 프로젝트 루트인지 확인 |
 | go.mod 존재 | Go 모듈 파일 유무 |
-| wcli 의존성 | go.mod에 seoyc/wcli 의존성 포함 여부 |
+| wcli 의존성 | go.mod에 wkqco33/wcli 의존성 포함 여부 |
 | replace 경로 유효성 | go.mod replace 지시어의 경로 존재 여부 |
 | wcli:commands 마커 | main.go에 자동 등록 마커 포함 여부 |
 ## Taskfile 타겟
