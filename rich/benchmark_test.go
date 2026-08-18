@@ -3,7 +3,7 @@ package rich_test
 import (
 	"testing"
 
-	"github.com/seoyc/wcli/rich"
+	"github.com/wkqco33/wcli/rich"
 )
 
 func BenchmarkDisplayWidth_ASCII(b *testing.B) {

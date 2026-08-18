@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/seoyc/wcli/config"
+	"github.com/wkqco33/wcli/config"
 )
 
 func TestStrictParsingINIErrorIncludesLine(t *testing.T) {

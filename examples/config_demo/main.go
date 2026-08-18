@@ -16,9 +16,9 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/seoyc/wcli"
-	"github.com/seoyc/wcli/config"
-	"github.com/seoyc/wcli/rich"
+	"github.com/wkqco33/wcli"
+	"github.com/wkqco33/wcli/config"
+	"github.com/wkqco33/wcli/rich"
 )
 
 // AppConfig struct binding 방식의 설정 구조체

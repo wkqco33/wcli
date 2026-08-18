@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/seoyc/wcli"
+	"github.com/wkqco33/wcli"
 )
 
 func TestFlagParsing(t *testing.T) {

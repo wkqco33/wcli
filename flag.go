@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/seoyc/wcli/config"
+	"github.com/wkqco33/wcli/config"
 )
 
 var lookupEnv = os.LookupEnv

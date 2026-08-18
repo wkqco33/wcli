@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/seoyc/wcli"
+	"github.com/wkqco33/wcli"
 )
 
 func TestCommandHelp(t *testing.T) {

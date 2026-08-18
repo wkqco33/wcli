@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/seoyc/wcli/rich"
+	"github.com/wkqco33/wcli/rich"
 )
 
 func TestSpinner_NonTerminal(t *testing.T) {

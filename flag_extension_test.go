@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/seoyc/wcli"
-	"github.com/seoyc/wcli/config"
+	"github.com/wkqco33/wcli"
+	"github.com/wkqco33/wcli/config"
 )
 
 func TestFlagBindEnv(t *testing.T) {

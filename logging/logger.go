@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/seoyc/wcli/rich"
+	"github.com/wkqco33/wcli/rich"
 )
 
 // LogLevel 로그 레벨을 나타내는 정수 타입

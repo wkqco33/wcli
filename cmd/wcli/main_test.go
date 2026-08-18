@@ -116,7 +116,7 @@ func TestDetectWcliPath(t *testing.T) {
 			name: "정상 탐지",
 			gitmodules: `[submodule "wcli"]
 	path = wcli
-	url = https://github.com/seoyc/wcli
+	url = https://github.com/wkqco33/wcli
 `,
 			wantPath: "./wcli",
 		},
@@ -124,7 +124,7 @@ func TestDetectWcliPath(t *testing.T) {
 			name: "커스텀 경로",
 			gitmodules: `[submodule "libs/wcli"]
 	path = libs/wcli
-	url = https://github.com/seoyc/wcli
+	url = https://github.com/wkqco33/wcli
 `,
 			wantPath: "./libs/wcli",
 		},
@@ -334,7 +334,7 @@ func TestBuildDoctorCmd(t *testing.T) {
 	defer cleanup()
 
 	os.WriteFile("main.go", []byte("package main\n// wcli:commands\n"), 0644)
-	os.WriteFile("go.mod", []byte("module myapp\nrequire github.com/seoyc/wcli v0.0.0\n"), 0644)
+	os.WriteFile("go.mod", []byte("module myapp\nrequire github.com/wkqco33/wcli v0.0.0\n"), 0644)
 
 	if err := buildDoctorCmd().Execute(nil); err != nil {
 		t.Fatalf("doctor 실행 실패: %v", err)
@@ -372,7 +372,7 @@ func TestRunDoctor_OkWithValidProject(t *testing.T) {
 
 	// 최소 프로젝트 파일 생성
 	os.WriteFile("main.go", []byte("package main\n// wcli:commands\n"), 0644)
-	os.WriteFile("go.mod", []byte("module myapp\n\nrequire github.com/seoyc/wcli v0.0.0\n"), 0644)
+	os.WriteFile("go.mod", []byte("module myapp\n\nrequire github.com/wkqco33/wcli v0.0.0\n"), 0644)
 
 	results := runDoctor()
 	for _, r := range results {

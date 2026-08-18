@@ -28,8 +28,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/seoyc/wcli"
-	"github.com/seoyc/wcli/rich"
+	"github.com/wkqco33/wcli"
+	"github.com/wkqco33/wcli/rich"
 )
 
 // 커스텀 도움말 템플릿 (미니멀하고 세련된 형태)

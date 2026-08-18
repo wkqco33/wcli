@@ -4,7 +4,7 @@ import (
 	"io"
 	"strings"
 
-	"github.com/seoyc/wcli/rich"
+	"github.com/wkqco33/wcli/rich"
 )
 
 // UsageLine 명령어의 사용법 한 줄을 반환합니다.

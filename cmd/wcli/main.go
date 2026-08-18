@@ -10,8 +10,8 @@ import (
 	"strings"
 	"text/template"
 
-	"github.com/seoyc/wcli"
-	"github.com/seoyc/wcli/rich"
+	"github.com/wkqco33/wcli"
+	"github.com/wkqco33/wcli/rich"
 )
 
 // wcliCommandsMarker wcli add 가 커맨드를 자동 주입할 때 사용하는 마커 주석

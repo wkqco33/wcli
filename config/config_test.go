@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/seoyc/wcli/config"
+	"github.com/wkqco33/wcli/config"
 )
 
 // --- 글로벌 config store 테스트 (SetConfigFile / ReadInConfig / Get) ---

@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/seoyc/wcli/rich"
+	"github.com/wkqco33/wcli/rich"
 )
 
 func TestFPrompt_Default(t *testing.T) {

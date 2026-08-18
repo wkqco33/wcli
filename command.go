@@ -9,8 +9,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/seoyc/wcli/logging"
-	"github.com/seoyc/wcli/rich"
+	"github.com/wkqco33/wcli/logging"
+	"github.com/wkqco33/wcli/rich"
 )
 
 var (

@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/seoyc/wcli/rich"
+	"github.com/wkqco33/wcli/rich"
 )
 
 func TestProgressBar_Render(t *testing.T) {

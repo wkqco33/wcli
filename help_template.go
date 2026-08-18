@@ -7,7 +7,7 @@ import (
 	"sync"
 	"text/template"
 
-	"github.com/seoyc/wcli/rich"
+	"github.com/wkqco33/wcli/rich"
 )
 
 // DefaultHelpTemplate wcli의 기본 도움말을 구성하는 텍스트 템플릿

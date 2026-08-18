@@ -5,9 +5,9 @@ const GoModTemplate = `module {{.ModuleName}}
 
 go 1.26.1
 
-require github.com/seoyc/wcli v0.0.0
+require github.com/wkqco33/wcli v0.0.0
 
-replace github.com/seoyc/wcli => {{.LibraryPath}}
+replace github.com/wkqco33/wcli => {{.LibraryPath}}
 `
 
 // MainTemplate main.go 파일 뼈대 템플릿
@@ -16,9 +16,9 @@ const MainTemplate = `package main
 import (
 	"os"
 
-	"github.com/seoyc/wcli"
-	"github.com/seoyc/wcli/logging"
-	"github.com/seoyc/wcli/rich"
+	"github.com/wkqco33/wcli"
+	"github.com/wkqco33/wcli/logging"
+	"github.com/wkqco33/wcli/rich"
 )
 
 func main() {
@@ -62,8 +62,8 @@ func main() {
 const CommandTemplate = `package main
 
 import (
-	"github.com/seoyc/wcli"
-	"github.com/seoyc/wcli/rich"
+	"github.com/wkqco33/wcli"
+	"github.com/wkqco33/wcli/rich"
 )
 
 var {{.CmdStructName}} = &wcli.Command{
