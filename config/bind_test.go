@@ -154,7 +154,9 @@ func TestLoad_NonPointer(t *testing.T) {
 
 func TestLoadPointer(t *testing.T) {
 	resetConfigState(t)
-	yamlContent := "PORT: 9090\nTEMP: 0.85\nSTOP: AI assistant\n"
+	// TEMP는 Windows에서 항상 설정되는 환경변수(임시 디렉토리 경로)이므로
+	// 환경변수와 충돌하지 않는 RATIO 태그를 사용한다.
+	yamlContent := "PORT: 9090\nRATIO: 0.85\nSTOP: AI assistant\n"
 	if err := os.WriteFile("test_pointer.yaml", []byte(yamlContent), 0644); err != nil {
 		t.Fatal(err)
 	}
@@ -162,7 +164,7 @@ func TestLoadPointer(t *testing.T) {
 
 	type ptrCfg struct {
 		Port *int     `wcli:"PORT"`
-		Temp *float64 `wcli:"TEMP"`
+		Temp *float64 `wcli:"RATIO"`
 		Stop *string  `wcli:"STOP"`
 		Seed *int     `wcli:"SEED"` // 지정하지 않은 필드는 nil이어야 함
 	}

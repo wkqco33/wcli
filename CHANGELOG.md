@@ -25,6 +25,8 @@
 - **`wcli init` Windows 경로 구분자 수정 (`cmd/wcli`)**
   - 절대 lib-path를 상대 경로로 변환할 때 `filepath.ToSlash` 적용
   - Windows에서 go.mod replace 경로가 백슬래시(`./vendor\wcli`)로 생성되던 문제 해결
+- **`TestLoadPointer` Windows 환경변수 충돌 수정 (`config`)**
+  - `TEMP` 태그가 Windows에서 항상 설정되는 환경변수와 충돌해 YAML 값을 덮어쓰던 문제를 `RATIO` 태그로 변경해 해결
 
 ## [v0.2.0] - 2026-08-18
 
