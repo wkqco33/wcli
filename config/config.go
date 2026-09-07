@@ -277,7 +277,9 @@ func parseYAMLContent(content string, strict bool) (map[string]any, error) {
 		}
 
 		nextTrimmed, nextIndent, found := nextYAMLSignificantLine(lines, i+1)
-		if found && nextIndent > indent && strings.HasPrefix(nextTrimmed, "- ") {
+		// 리스트는 키보다 깊은 들여쓰기뿐 아니라 같은 들여쓰기에도 올 수 있다.
+		// (예: `server:\n- name: foo`) `- ` 접두사 가드로 중첩 맵과 구분한다.
+		if found && nextIndent >= indent && strings.HasPrefix(nextTrimmed, "- ") {
 			items, last, err := parseYAMLList(lines, i+1, nextIndent, strict)
 			if err != nil {
 				return nil, err

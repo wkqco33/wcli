@@ -10,6 +10,7 @@
 - **YAML 리스트-오브-맵 파싱 지원 (`config`)**
   - `servers:\n  - name: foo\n    host: localhost` 형태의 리스트-오브-맵을 `[]map[string]any`로 파싱
   - 스칼라 리스트와 리스트-오브-맵 혼재 파싱 지원
+  - 키와 **같은 들여쓰기**에 오는 리스트(`server:\n- name: foo`)도 파싱 지원
 - **구조체 슬라이스 바인딩 지원 (`config`)**
   - 리스트-오브-맵을 `[]Struct` 필드로 바인딩 (`wcli` 태그 기반)
 

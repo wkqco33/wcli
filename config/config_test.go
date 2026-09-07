@@ -256,6 +256,106 @@ servers:
 	}
 }
 
+// TestYAMLListOfMapsSameIndent 키와 같은 들여쓰기에 리스트가 오는 경우를 검증합니다.
+// (예: `server:\n- name: foo`)
+func TestYAMLListOfMapsSameIndent(t *testing.T) {
+	resetConfigState(t)
+	yamlContent := `
+server:
+- name: alpha
+  host: localhost
+  port: 8080
+- name: beta
+  host: example.com
+  port: 9090
+`
+	tmpFile, err := os.CreateTemp("", "config-sameindent-*.yaml")
+	if err != nil {
+		t.Fatalf("임시 파일 생성 실패: %v", err)
+	}
+	defer os.Remove(tmpFile.Name())
+
+	if _, err := tmpFile.Write([]byte(yamlContent)); err != nil {
+		t.Fatalf("임시 파일 쓰기 실패: %v", err)
+	}
+	tmpFile.Close()
+
+	config.SetConfigFile(tmpFile.Name())
+	if err := config.ReadInConfig(); err != nil {
+		t.Fatalf("ReadInConfig 실패: %v", err)
+	}
+
+	servers, ok := config.Get("server").([]any)
+	if !ok {
+		t.Fatalf("server가 []any가 아님: %T (%v)", config.Get("server"), config.Get("server"))
+	}
+	if len(servers) != 2 {
+		t.Fatalf("server 길이 불일치. 예상: 2, 실제: %d", len(servers))
+	}
+
+	first, ok := servers[0].(map[string]any)
+	if !ok {
+		t.Fatalf("server[0]이 map이 아님: %T", servers[0])
+	}
+	if first["name"] != "alpha" || first["host"] != "localhost" || first["port"] != "8080" {
+		t.Errorf("server[0] 값 불일치: %v", first)
+	}
+
+	second, ok := servers[1].(map[string]any)
+	if !ok {
+		t.Fatalf("server[1]이 map이 아님: %T", servers[1])
+	}
+	if second["name"] != "beta" || second["host"] != "example.com" || second["port"] != "9090" {
+		t.Errorf("server[1] 값 불일치: %v", second)
+	}
+}
+
+// TestYAMLListOfMapsSameIndentNested 중첩 맵 안에서 키와 같은 들여쓰기에 리스트가 오는 경우를 검증합니다.
+func TestYAMLListOfMapsSameIndentNested(t *testing.T) {
+	resetConfigState(t)
+	yamlContent := `
+app:
+  server:
+  - name: alpha
+    host: localhost
+  other: value
+`
+	tmpFile, err := os.CreateTemp("", "config-sameindent-nested-*.yaml")
+	if err != nil {
+		t.Fatalf("임시 파일 생성 실패: %v", err)
+	}
+	defer os.Remove(tmpFile.Name())
+
+	if _, err := tmpFile.Write([]byte(yamlContent)); err != nil {
+		t.Fatalf("임시 파일 쓰기 실패: %v", err)
+	}
+	tmpFile.Close()
+
+	config.SetConfigFile(tmpFile.Name())
+	if err := config.ReadInConfig(); err != nil {
+		t.Fatalf("ReadInConfig 실패: %v", err)
+	}
+
+	servers, ok := config.Get("app.server").([]any)
+	if !ok {
+		t.Fatalf("app.server가 []any가 아님: %T (%v)", config.Get("app.server"), config.Get("app.server"))
+	}
+	if len(servers) != 1 {
+		t.Fatalf("app.server 길이 불일치. 예상: 1, 실제: %d", len(servers))
+	}
+	first, ok := servers[0].(map[string]any)
+	if !ok {
+		t.Fatalf("app.server[0]이 map이 아님: %T", servers[0])
+	}
+	if first["name"] != "alpha" || first["host"] != "localhost" {
+		t.Errorf("app.server[0] 값 불일치: %v", first)
+	}
+
+	if config.Get("app.other") != "value" {
+		t.Errorf("app.other 값 불일치: %v", config.Get("app.other"))
+	}
+}
+
 func TestTOMLConfig(t *testing.T) {
 	resetConfigState(t)
 	tomlContent := `
