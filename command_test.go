@@ -490,3 +490,154 @@ func TestExecuteSilenceErrorsSuppressesErrWriter(t *testing.T) {
 		t.Fatalf("SilenceErrors=true이면 ErrWriter 출력이 없어야 함: %q", errBuf.String())
 	}
 }
+
+// TestRouteWithFlagsBeforeSubcommand 서브커맨드 앞에 플래그가 온 경우에도
+// 플래그 파싱 후 라우팅이 수행되는지 검증합니다. (예: `root --config X sub`)
+func TestRouteWithFlagsBeforeSubcommand(t *testing.T) {
+	t.Parallel()
+
+	var configVal string
+	var subRan bool
+	var subArgs []string
+
+	root := &wcli.Command{
+		Use:           "root",
+		SilenceErrors: true,
+	}
+	root.PersistentFlags().StringVar(&configVal, "config", "c", "", "설정 파일")
+
+	sub := &wcli.Command{
+		Use: "sub",
+		Run: func(ctx *wcli.Context) error {
+			subRan = true
+			subArgs = append([]string(nil), ctx.Args...)
+			return nil
+		},
+	}
+	root.AddCommand(sub)
+
+	t.Run("서브커맨드 앞에 persistent 플래그", func(t *testing.T) {
+		configVal = ""
+		subRan = false
+		subArgs = nil
+
+		err := root.Execute([]string{"--config", "prod.yaml", "sub", "nodes"})
+		if err != nil {
+			t.Fatalf("실행 실패: %v", err)
+		}
+		if !subRan {
+			t.Fatal("서브커맨드가 실행되어야 함")
+		}
+		if configVal != "prod.yaml" {
+			t.Errorf("config 값 불일치. 예상: prod.yaml, 실제: %s", configVal)
+		}
+		if !reflect.DeepEqual(subArgs, []string{"nodes"}) {
+			t.Errorf("서브커맨드 인자 불일치. 예상: [nodes], 실제: %v", subArgs)
+		}
+	})
+
+	t.Run("서브커맨드 앞에 인라인 플래그", func(t *testing.T) {
+		configVal = ""
+		subRan = false
+
+		err := root.Execute([]string{"--config=dev.yaml", "sub"})
+		if err != nil {
+			t.Fatalf("실행 실패: %v", err)
+		}
+		if !subRan {
+			t.Fatal("서브커맨드가 실행되어야 함")
+		}
+		if configVal != "dev.yaml" {
+			t.Errorf("config 값 불일치. 예상: dev.yaml, 실제: %s", configVal)
+		}
+	})
+
+	t.Run("서브커맨드 뒤에 플래그 (기존 동작 유지)", func(t *testing.T) {
+		configVal = ""
+		subRan = false
+
+		err := root.Execute([]string{"sub", "--config", "after.yaml"})
+		if err != nil {
+			t.Fatalf("실행 실패: %v", err)
+		}
+		if !subRan {
+			t.Fatal("서브커맨드가 실행되어야 함")
+		}
+		if configVal != "after.yaml" {
+			t.Errorf("config 값 불일치. 예상: after.yaml, 실제: %s", configVal)
+		}
+	})
+}
+
+// TestHelpFlagBeforeSubcommand 서브커맨드 앞에 플래그가 있고 서브커맨드 뒤에 --help가 온 경우,
+// 루트가 아닌 서브커맨드의 도움말이 출력되는지 검증합니다.
+func TestHelpFlagBeforeSubcommand(t *testing.T) {
+	t.Parallel()
+
+	var outBuf strings.Builder
+	root := &wcli.Command{
+		Use:       "root",
+		OutWriter: &outBuf,
+	}
+	root.PersistentFlags().StringVar(new(string), "config", "c", "", "설정 파일")
+
+	sub := &wcli.Command{
+		Use: "sub",
+		Run: func(ctx *wcli.Context) error { return nil },
+	}
+	root.AddCommand(sub)
+
+	err := root.Execute([]string{"--config", "x.yaml", "sub", "--help"})
+	if err != nil {
+		t.Fatalf("실행 실패: %v", err)
+	}
+	out := outBuf.String()
+	if !strings.Contains(out, "sub") {
+		t.Errorf("서브커맨드 도움말이 출력되어야 함. 실제 출력: %q", out)
+	}
+	if strings.Contains(out, "root") && !strings.Contains(out, "Usage:") {
+		// 루트 도움말이 아닌지 확인 (루트 도움말에는 Usage: root가 포함됨)
+		t.Errorf("루트 도움말이 출력됨: %q", out)
+	}
+}
+
+// TestVersionFlagBeforeSubcommand 서브커맨드 앞에 --version이 오면 루트 버전이,
+// 서브커맨드 뒤에 --version이 오면 서브커맨드 버전이 출력되는지 검증합니다.
+func TestVersionFlagBeforeSubcommand(t *testing.T) {
+	t.Parallel()
+
+	var outBuf strings.Builder
+	root := &wcli.Command{
+		Use:       "root",
+		Version:   "root v1.0.0",
+		OutWriter: &outBuf,
+	}
+	sub := &wcli.Command{
+		Use:     "sub",
+		Version: "sub v2.0.0",
+		Run:     func(ctx *wcli.Context) error { return nil },
+	}
+	root.AddCommand(sub)
+
+	t.Run("서브커맨드 앞 --version → 루트 버전", func(t *testing.T) {
+		outBuf.Reset()
+		err := root.Execute([]string{"--version", "sub"})
+		if err != nil {
+			t.Fatalf("실행 실패: %v", err)
+		}
+		if !strings.Contains(outBuf.String(), "root v1.0.0") {
+			t.Errorf("루트 버전이 출력되어야 함: %q", outBuf.String())
+		}
+	})
+
+	t.Run("서브커맨드 뒤 --version → 서브커맨드 버전", func(t *testing.T) {
+		outBuf.Reset()
+		err := root.Execute([]string{"sub", "--version"})
+		if err != nil {
+			t.Fatalf("실행 실패: %v", err)
+		}
+		if !strings.Contains(outBuf.String(), "sub v2.0.0") {
+			t.Errorf("서브커맨드 버전이 출력되어야 함: %q", outBuf.String())
+		}
+	})
+}

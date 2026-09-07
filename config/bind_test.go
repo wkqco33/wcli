@@ -236,6 +236,49 @@ func TestLoadSliceBinding(t *testing.T) {
 	}
 }
 
+// TestLoadSliceOfStructBinding YAML 리스트-오브-맵을 구조체 슬라이스로 바인딩하는 것을 검증합니다.
+func TestLoadSliceOfStructBinding(t *testing.T) {
+	resetConfigState(t)
+	yamlContent := `
+servers:
+  - name: alpha
+    host: localhost
+    port: 8080
+  - name: beta
+    host: example.com
+    port: 9090
+`
+	if err := os.WriteFile("test_slice_struct.yaml", []byte(yamlContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove("test_slice_struct.yaml")
+
+	type serverCfg struct {
+		Name string `wcli:"name"`
+		Host string `wcli:"host"`
+		Port int    `wcli:"port"`
+	}
+	type sliceCfg struct {
+		Servers []serverCfg `wcli:"servers"`
+	}
+
+	var cfg sliceCfg
+	if err := config.Load(&cfg, config.WithFiles("test_slice_struct.yaml")); err != nil {
+		t.Fatalf("Load 실패: %v", err)
+	}
+
+	if len(cfg.Servers) != 2 {
+		t.Fatalf("Servers 길이 불일치. 예상: 2, 실제: %d", len(cfg.Servers))
+	}
+	expected := []serverCfg{
+		{Name: "alpha", Host: "localhost", Port: 8080},
+		{Name: "beta", Host: "example.com", Port: 9090},
+	}
+	if !reflect.DeepEqual(cfg.Servers, expected) {
+		t.Errorf("Servers 바인딩 실패.\n실제: %+v\n기대: %+v", cfg.Servers, expected)
+	}
+}
+
 func TestLoadArrayBindingAcrossFormats(t *testing.T) {
 	tests := []struct {
 		name          string

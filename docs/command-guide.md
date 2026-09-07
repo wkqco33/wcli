@@ -51,6 +51,7 @@ rootCmd.AddCommand(
 ```
 
 도움말 출력 예:
+
 ```
 배포 관리:
   deploy     배포 실행
@@ -124,18 +125,19 @@ Error: unknown command "deply"
 Did you mean?
   deploy
 ```
+
 ## 플래그
 
 ### 지원 타입
 
-| 메서드 | 타입 | 예시 |
-|---|---|---|
-| `StringVar` | `string` | `--name alice`, `--name=alice` |
-| `IntVar` | `int` | `--count 5`, `--count=5` |
-| `BoolVar` | `bool` | `--verbose`, `--verbose=false` |
-| `Float64Var` | `float64` | `--ratio 3.14` |
-| `DurationVar` | `time.Duration` | `--timeout 30s`, `--timeout=1h30m` |
-| `StringSliceVar` | `[]string` | `--tag foo --tag bar` (누적) |
+| 메서드           | 타입            | 예시                               |
+| ---------------- | --------------- | ---------------------------------- |
+| `StringVar`      | `string`        | `--name alice`, `--name=alice`     |
+| `IntVar`         | `int`           | `--count 5`, `--count=5`           |
+| `BoolVar`        | `bool`          | `--verbose`, `--verbose=false`     |
+| `Float64Var`     | `float64`       | `--ratio 3.14`                     |
+| `DurationVar`    | `time.Duration` | `--timeout 30s`, `--timeout=1h30m` |
+| `StringSliceVar` | `[]string`      | `--tag foo --tag bar` (누적)       |
 
 ### 플래그 등록
 
@@ -179,6 +181,11 @@ rootCmd.PersistentFlags().BoolVar(&verbose, "verbose", "v", false, "상세 출�
 
 help 출력 시 상속된 플래그는 `Global Flags:` 섹션으로 분리 표시됩니다.
 
+> **플래그 위치:** persistent 플래그는 서브커맨드 앞이나 뒤 어디에든 둘 수 있습니다.
+> `app --config x.yaml get nodes` 와 `app get nodes --config x.yaml` 모두 동일하게 동작합니다.
+> 서브커맨드 앞에 온 플래그는 서브커맨드가 직접 파싱하므로, 해당 플래그는 persistent로 등록해야 합니다.
+> `--version`/`--help`/`-h`가 서브커맨드보다 앞에 오면 현재 커맨드가 처리합니다.
+
 ### 필수 플래그 & 검증
 
 ```go
@@ -211,6 +218,7 @@ app --name foo -- --not-a-flag positional-arg
 ```
 
 > 다중 문자 단축키(예: `Shorthand: "vv"`)가 등록돼 있으면 결합 분해보다 우선합니다.
+
 ## 출력 제어
 
 ### OutWriter / ErrWriter
@@ -240,6 +248,7 @@ rich.NoColor = true
 ```
 
 파이프(`./app | cat`)나 파일 리다이렉션 시 ANSI 코드가 자동으로 제거됩니다.
+
 ## 커스텀 도움말
 
 ```go
@@ -253,6 +262,7 @@ cmd := &wcli.Command{
 ```
 
 `HelpFunc`가 `nil`이면 기본 도움말이 출력됩니다.
+
 ## 에러 처리
 
 `wcli`는 구체적인 원인 추적이 가능하도록 구조화된 에러 타입들을 제공합니다. `errors.As`를 통해 에러 원인을 분기하여 구체적인 속성에 접근할 수 있습니다.
@@ -276,6 +286,7 @@ if err := cmd.Execute(os.Args[1:]); err != nil {
     }
 }
 ```
+
 ## 로깅 (Logging)
 
 성능 최우선 원칙에 따라 설계된 경량 로거 서브패키지 `logging`을 제공합니다.
@@ -305,6 +316,7 @@ manager := logging.NewLoggerManager()
 manager.SetLogger(logging.NewDefaultLogger(os.Stderr, logging.LevelDebug, true))
 manager.GetLogger().Log(logging.LevelInfo, "instance logger")
 ```
+
 ## 셸 자동 완성 (Shell Autocomplete)
 
 `wcli.NewCompletionCommand`로 Bash / Zsh / Fish 자동 완성 스크립트를 생성합니다.
@@ -323,6 +335,7 @@ source <(app completion zsh)
 # Fish
 app completion fish > ~/.config/fish/completions/app.fish
 ```
+
 ## 커스텀 도움말 템플릿 (Template Help)
 
 `text/template` 형식을 사용해 도움말 레이아웃을 변경할 수 있습니다. 템플릿 컴파일 결과는 패키지 단에서 캐싱됩니다.

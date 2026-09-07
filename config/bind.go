@@ -310,6 +310,32 @@ func bindStruct(structVal reflect.Value, data map[string]any, rootData map[strin
 			}
 		}
 
+		if field.Kind() == reflect.Slice && field.Type().Elem().Kind() == reflect.Struct {
+			// 리스트-오브-맵을 구조체 슬라이스로 바인딩
+			if !exists {
+				field.Set(reflect.MakeSlice(field.Type(), 0, 0))
+				continue
+			}
+			rawMaps, ok := rawValue.([]any)
+			if !ok {
+				return fmt.Errorf("field %s: expected list of maps, got %T", fieldType.Name, rawValue)
+			}
+			sliceVal := reflect.MakeSlice(field.Type(), len(rawMaps), len(rawMaps))
+			for i, raw := range rawMaps {
+				rawMap, ok := raw.(map[string]any)
+				if !ok {
+					return fmt.Errorf("field %s: slice element %d: expected map, got %T", fieldType.Name, i, raw)
+				}
+				elem := reflect.New(field.Type().Elem()).Elem()
+				if err := bindStruct(elem, rawMap, rootData, tagName, fullKey); err != nil {
+					return fmt.Errorf("field %s: slice element %d: %w", fieldType.Name, i, err)
+				}
+				sliceVal.Index(i).Set(elem)
+			}
+			field.Set(sliceVal)
+			continue
+		}
+
 		if field.Kind() == reflect.Struct {
 			nestedData, ok := rawValue.(map[string]any)
 			if !ok {

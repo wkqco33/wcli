@@ -211,11 +211,8 @@ func (c *Command) execute(ctx *Context) error {
 	logger := ctx.Logger
 	// 1. 하위 명령어가 있는지 확인 (O(1) 맵 조회)
 	if len(ctx.Args) > 0 {
-		if sub, ok := c.commandMap[ctx.Args[0]]; ok {
-			logger.Log(logging.LevelDebug, "Routing command from %q to sub-command %q", c.Name(), sub.Name())
-			// Writer는 자식 구조체를 변경하지 않고 outWriter()/errWriter()의 부모 체인 탐색으로 상속됨
-			ctx.Args = ctx.Args[1:]
-			return sub.execute(ctx)
+		if routed, err := c.tryRoute(ctx); routed {
+			return err
 		}
 
 		// 1-1. commandMap miss + 서브커맨드가 있을 때 퍼지 매칭 제안
@@ -230,6 +227,18 @@ func (c *Command) execute(ctx *Context) error {
 
 	// 2. 플래그 셋을 1회만 빌드하여 버전/도움말 검사 및 파싱에 재사용
 	combined := c.buildCombinedFlagSet()
+
+	// 2-1. 서브커맨드 앞에 플래그가 온 경우, 플래그 값을 건너뛰며 서브커맨드 위치를 탐색한다.
+	// (예: `root --config X sub` ) 서브커맨드 토큰만 제거하고 앞의 플래그는 유지하여
+	// 서브커맨드가 persistent 플래그를 직접 파싱하도록 한다.
+	if len(c.commands) > 0 {
+		if idx := c.findSubcommandIndex(combined, ctx.Args); idx >= 0 {
+			sub := c.commandMap[ctx.Args[idx]]
+			logger.Log(logging.LevelDebug, "Routing command from %q to sub-command %q (flags before subcommand)", c.Name(), sub.Name())
+			ctx.Args = append(append([]string{}, ctx.Args[:idx]...), ctx.Args[idx+1:]...)
+			return sub.execute(ctx)
+		}
+	}
 
 	// 3. --version 플래그 확인
 	if c.Version != "" && c.isVersionRequested(combined, ctx.Args) {
@@ -312,6 +321,60 @@ func (c *Command) execute(ctx *Context) error {
 	}
 
 	return nil
+}
+
+// tryRoute 첫 번째 인자가 서브커맨드(이름 또는 별칭)면 해당 커맨드로 라우팅하고 true를 반환합니다.
+// 라우팅 대상이 없으면 false를 반환합니다. 라우팅 시 ctx.Args에서 서브커맨드 토큰을 제거합니다.
+func (c *Command) tryRoute(ctx *Context) (bool, error) {
+	if len(ctx.Args) == 0 {
+		return false, nil
+	}
+	if sub, ok := c.commandMap[ctx.Args[0]]; ok {
+		ctx.Logger.Log(logging.LevelDebug, "Routing command from %q to sub-command %q", c.Name(), sub.Name())
+		// Writer는 자식 구조체를 변경하지 않고 outWriter()/errWriter()의 부모 체인 탐색으로 상속됨
+		ctx.Args = ctx.Args[1:]
+		return true, sub.execute(ctx)
+	}
+	return false, nil
+}
+
+// findSubcommandIndex args에서 서브커맨드(이름 또는 별칭)의 위치를 찾아 반환합니다.
+// 비-bool 플래그의 값으로 소비되는 토큰은 건너뜁니다. 서브커맨드가 없으면 -1을 반환합니다.
+// `--` 종결자 이후의 인자는 서브커맨드로 해석하지 않습니다.
+func (c *Command) findSubcommandIndex(combined *FlagSet, args []string) int {
+	skipNext := false
+	for i, arg := range args {
+		if skipNext {
+			skipNext = false
+			continue
+		}
+		if arg == "--" {
+			return -1
+		}
+		// --version/--help/-h는 이 커맨드가 처리해야 하는 특수 플래그이므로,
+		// 서브커맨드보다 앞에 있으면 라우팅하지 않고 현재 커맨드가 처리하도록 한다.
+		if arg == "--version" || arg == "--help" || arg == "-h" {
+			return -1
+		}
+		if strings.HasPrefix(arg, "--") && !strings.Contains(arg, "=") {
+			name := arg[2:]
+			if combined != nil {
+				if flag, ok := combined.flags[name]; ok && flag.Type != TypeBool {
+					skipNext = true
+				}
+			}
+		} else if strings.HasPrefix(arg, "-") && len(arg) == 2 && !strings.Contains(arg, "=") {
+			short := arg[1:]
+			if combined != nil {
+				if flag, ok := combined.shorts[short]; ok && flag.Type != TypeBool {
+					skipNext = true
+				}
+			}
+		} else if _, ok := c.commandMap[arg]; ok {
+			return i
+		}
+	}
+	return -1
 }
 
 // buildCombinedFlagSet 조상의 persistent 플래그 + 자신의 persistent 플래그 + 로컬 플래그를

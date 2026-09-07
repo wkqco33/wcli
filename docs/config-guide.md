@@ -28,6 +28,7 @@ cmd.Flags().MarkFlagsMutuallyExclusive("json", "yaml")
 ```
 
 도움말에 제약 조건이 자동으로 표시됩니다:
+
 ```
 Flag Constraints:
   mutually exclusive: --json, --yaml
@@ -54,9 +55,11 @@ cmd.Flags().MarkFlagsRequiredTogether("user", "password")
 
 > **파서 한계 (의도된 단순화):** YAML/TOML/INI 파서는 표준 라이브러리만으로 구현된 경량 파서입니다.
 > 복잡한 문법은 지원하지 않으니 단순한 키-값 + 중첩 구조 위주로 사용하세요. JSON은 표준 `encoding/json`을 사용하므로 제약이 없습니다.
-> - **지원:** JSON 배열, YAML 리스트(`- item`) / 인라인 배열(`[a, b]`), TOML 배열
+>
+> - **지원:** JSON 배열, YAML 리스트(`- item`) / 리스트-오브-맵(`- key: value`) / 인라인 배열(`[a, b]`), TOML 배열
+> - **구조체 슬라이스 바인딩:** YAML 리스트-오브-맵은 `[]Struct` 필드로 바인딩할 수 있습니다.
 > - **INI/.env 배열형 입력:** 네이티브 배열 문법은 없지만 `a,b,c` 같은 comma-separated 문자열은 `GetStringSlice` / 슬라이스 바인딩에서 사용할 수 있습니다.
-> - **미지원:** 멀티라인 값, YAML 앵커/별칭, TOML 인라인 테이블, 값 안의 구분자(예: 따옴표로 감싼 `:`나 `=`)
+> - **미지원:** 멀티라인 값, YAML 앵커/별칭, TOML 인라인 테이블, 값 안의 구분자(예: 따옴표로 감싼 `:`나 `=`), 리스트-오브-맵 아이템 내부의 중첩 맵
 > - YAML 들여쓰기는 **공백만** 지원하며 탭은 인식하지 않습니다.
 > - 모든 스칼라 값은 **문자열**로 로드됩니다(타입 변환은 플래그 바인딩 시점에 수행).
 >
@@ -101,6 +104,7 @@ config.SetDefault("app.port", 8080)  // 키가 없을 때만 설정
 앱 이름 기반으로 표준 경로를 순서대로 탐색해 첫 번째로 발견된 설정 파일을 로드합니다.
 
 탐색 순서:
+
 1. `extraPaths` (직접 지정 경로)
 2. `./config.{yaml,yml,toml,ini,json,env}`
 3. `~/.{appName}.{yaml,...}`
@@ -120,8 +124,8 @@ if err := config.AutoDiscoverConfig("myapp", "/opt/myapp/config.yaml"); err != n
 
 ### 환경변수 글로벌 연동 및 리로드 (Env & Reload)
 
-* **환경변수 글로벌 연동 (`AutomaticEnv`)**: 활성화 시 `config.Get`을 통한 설정 조회 시 환경변수(예: `DATABASE_PORT`)가 존재하면 파일 내 설정 값보다 환경변수 값을 최우선으로 연동하여 반환합니다. 대소문자는 구분하지 않습니다.
-* **설정 리로드 (`ReloadConfig`)**: 서버나 장기 실행 CLI 프로세스 등에서 설정 파일이 동적으로 변경되었을 때 메모리에 이미 로드된 설정을 디스크에서 다시 로드합니다.
+- **환경변수 글로벌 연동 (`AutomaticEnv`)**: 활성화 시 `config.Get`을 통한 설정 조회 시 환경변수(예: `DATABASE_PORT`)가 존재하면 파일 내 설정 값보다 환경변수 값을 최우선으로 연동하여 반환합니다. 대소문자는 구분하지 않습니다.
+- **설정 리로드 (`ReloadConfig`)**: 서버나 장기 실행 CLI 프로세스 등에서 설정 파일이 동적으로 변경되었을 때 메모리에 이미 로드된 설정을 디스크에서 다시 로드합니다.
 
 ```go
 // 글로벌 환경변수 최우선 연동 활성화

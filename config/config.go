@@ -278,36 +278,12 @@ func parseYAMLContent(content string, strict bool) (map[string]any, error) {
 
 		nextTrimmed, nextIndent, found := nextYAMLSignificantLine(lines, i+1)
 		if found && nextIndent > indent && strings.HasPrefix(nextTrimmed, "- ") {
-			items := make([]any, 0)
-			for j := i + 1; j < len(lines); j++ {
-				listLine := lines[j]
-				listTrimmed := strings.TrimSpace(listLine)
-				if listTrimmed == "" || strings.HasPrefix(listTrimmed, "#") {
-					continue
-				}
-
-				listIndent := countLeadingSpaces(listLine)
-				if listIndent <= indent {
-					i = j - 1
-					break
-				}
-				if !strings.HasPrefix(listTrimmed, "- ") {
-					if strict {
-						return nil, fmt.Errorf("yaml parse error at line %d: list item must start with '- '", j+1)
-					}
-					i = j - 1
-					break
-				}
-
-				itemVal := strings.TrimSpace(strings.TrimPrefix(listTrimmed, "- "))
-				parsed, err := parseConfigScalarOrArray(itemVal, j+1, "yaml")
-				if err != nil {
-					return nil, err
-				}
-				items = append(items, parsed)
-				i = j
+			items, last, err := parseYAMLList(lines, i+1, nextIndent, strict)
+			if err != nil {
+				return nil, err
 			}
 			stack[len(stack)-1].m[key] = items
+			i = last
 			continue
 		}
 
@@ -317,6 +293,114 @@ func parseYAMLContent(content string, strict bool) (map[string]any, error) {
 	}
 
 	return data, nil
+}
+
+// parseYAMLList YAML 리스트를 파싱합니다. 스칼라 리스트와 리스트-오브-맵을 모두 지원합니다.
+// start는 리스트의 첫 `- ` 줄 인덱스, listIndent는 리스트 아이템의 들여쓰기입니다.
+// 마지막으로 소비한 줄의 인덱스와 파싱된 아이템들을 반환합니다.
+func parseYAMLList(lines []string, start, listIndent int, strict bool) ([]any, int, error) {
+	items := make([]any, 0)
+	i := start
+	for i < len(lines) {
+		line := lines[i]
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+			i++
+			continue
+		}
+		curIndent := countLeadingSpaces(line)
+		if curIndent < listIndent {
+			break
+		}
+		if curIndent > listIndent {
+			// 이전 아이템의 맵 키는 parseYAMLMapItem이 소비하므로 여기 도달하면 안 됨
+			if strict {
+				return nil, i, fmt.Errorf("yaml parse error at line %d: unexpected indentation", i+1)
+			}
+			i++
+			continue
+		}
+		// curIndent == listIndent: 새 리스트 아이템
+		if !strings.HasPrefix(trimmed, "- ") {
+			break
+		}
+		itemContent := strings.TrimSpace(strings.TrimPrefix(trimmed, "- "))
+		if itemContent == "" || strings.Contains(itemContent, ":") {
+			// 맵 아이템: 첫 키가 인라인(`- name: foo`)이거나 다음 줄에 정의됨(`- `)
+			itemMap := make(map[string]any)
+			last, err := parseYAMLMapItem(lines, i, listIndent, itemMap, strict)
+			if err != nil {
+				return nil, last, err
+			}
+			items = append(items, itemMap)
+			i = last + 1
+			continue
+		}
+		// 스칼라 아이템
+		parsed, err := parseConfigScalarOrArray(itemContent, i+1, "yaml")
+		if err != nil {
+			return nil, i, err
+		}
+		items = append(items, parsed)
+		i++
+	}
+	return items, i - 1, nil
+}
+
+// parseYAMLMapItem YAML 리스트-오브-맵의 한 아이템을 파싱합니다.
+// start는 `- ` 로 시작하는 줄의 인덱스입니다. 아이템의 맵 키는 listIndent보다 깊은 들여쓰기의 줄들입니다.
+// 마지막으로 소비한 줄의 인덱스를 반환합니다.
+func parseYAMLMapItem(lines []string, start, listIndent int, m map[string]any, strict bool) (int, error) {
+	first := strings.TrimSpace(lines[start])
+	content := strings.TrimSpace(strings.TrimPrefix(first, "- "))
+	if content != "" {
+		if err := parseYAMLKeyValue(content, start, m, strict); err != nil {
+			return start, err
+		}
+	}
+
+	last := start
+	for j := start + 1; j < len(lines); j++ {
+		line := lines[j]
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+			continue
+		}
+		curIndent := countLeadingSpaces(line)
+		if curIndent <= listIndent {
+			break
+		}
+		if err := parseYAMLKeyValue(trimmed, j, m, strict); err != nil {
+			return last, err
+		}
+		last = j
+	}
+	return last, nil
+}
+
+// parseYAMLKeyValue `key: value` 형태의 한 줄을 파싱하여 m에 저장합니다.
+// 값이 비어있으면 중첩 맵을 생성합니다.
+func parseYAMLKeyValue(line string, lineNum int, m map[string]any, strict bool) error {
+	pair := strings.SplitN(line, ":", 2)
+	if len(pair) != 2 {
+		if strict {
+			return fmt.Errorf("yaml parse error at line %d: expected key: value", lineNum+1)
+		}
+		return nil
+	}
+	key := strings.TrimSpace(pair[0])
+	val := strings.TrimSpace(pair[1])
+	if val != "" {
+		parsed, err := parseConfigScalarOrArray(val, lineNum+1, "yaml")
+		if err != nil {
+			return err
+		}
+		m[key] = parsed
+	} else {
+		// 값이 비어있으면 중첩 맵 (다음 줄에서 정의)
+		m[key] = make(map[string]any)
+	}
+	return nil
 }
 
 func parseTOMLContent(content string, strict bool) (map[string]any, error) {

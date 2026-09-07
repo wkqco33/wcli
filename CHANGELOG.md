@@ -3,9 +3,27 @@
 모든 주요 변경 사항은 이 파일에 기록됩니다.
 이 프로젝트는 [Semantic Versioning](https://semver.org/spec/v2.0.0.html) 및 [Keep a Changelog](https://keepachangelog.com/ko/1.0.0/) 형식을 준수합니다.
 
+## [Unreleased]
+
+### 추가 (Added)
+
+- **YAML 리스트-오브-맵 파싱 지원 (`config`)**
+  - `servers:\n  - name: foo\n    host: localhost` 형태의 리스트-오브-맵을 `[]map[string]any`로 파싱
+  - 스칼라 리스트와 리스트-오브-맵 혼재 파싱 지원
+- **구조체 슬라이스 바인딩 지원 (`config`)**
+  - 리스트-오브-맵을 `[]Struct` 필드로 바인딩 (`wcli` 태그 기반)
+
+### 변경 (Changed)
+
+- **서브커맨드 앞 플래그 라우팅 지원 (`command`)**
+  - `root --config X sub` 처럼 서브커맨드 앞에 플래그가 온 경우에도 라우팅 수행
+  - 플래그 값을 건너뛰며 서브커맨드 위치를 탐색하는 `findSubcommandIndex` 도입
+  - `--version`/`--help`/`-h`가 서브커맨드보다 앞에 오면 현재 커맨드가 처리하도록 보장
+
 ## [v0.2.0] - 2026-08-18
 
 ### 추가 (Added)
+
 - **TDD 경량 테스트 하네스 (`internal/testutil`)**
   - 표준 출력/에러 버퍼 자동 캡처 실행 헬퍼 (`ExecuteCommand`)
   - Go 표준 `t.Helper()` 기반 제로 디펜던시 단언 헬퍼 (`AssertEqual`, `AssertContains`, `AssertErrorIs`, `AssertErrorAs`, `AssertTrue`, `AssertLen` 등)
@@ -20,11 +38,13 @@
   - `AGENTS.md` 작성 (개발 철학, TDD 표준 작성법, 검증 태스크, 릴리스 규칙 단일화)
 
 ### 변경 (Changed)
+
 - `config` 패키지의 패키지 레벨 함수들을 `Store` 인스턴스 위임으로 일원화하여 코드 중복 제거 및 유지보수성 향상
 
 ## [v0.1.0] - 2026-08-15
 
 ### 추가 (Added)
+
 - **Cobra 스타일의 커맨드 및 플래그 라우팅 엔진**
   - `Command` 구조체 기반 계층적 CLI 트리 구성
   - Persistent 플래그/훅 (`PersistentPreRun`, `PersistentPostRun`) 지원
@@ -51,6 +71,7 @@
   - `Taskfile.yml`을 통한 빌드, 테스트, 커버리지, 포맷, 린트, 벤치마크 일괄 관리
 
 ### 수정 (Fixed)
+
 - **커스텀 도움말 템플릿 플래그 필드 누락 해결**
   - 커스텀 템플릿에서 `{{.Name}}`, `{{.Shorthand}}`, `{{.TypeStr}}`, `{{.Required}}`를 직접 참조할 수 있도록 `flagHelpData` 필드 확장
 - **Box/Table 전각 문자 정렬 오류 수정**
