@@ -1,0 +1,10 @@
+# 모든 텍스트 파일을 LF 줄바꿈으로 강제합니다.
+# Windows 러너에서 gofmt -l 이 CRLF를 위반으로 판단하는 문제를 방지합니다.
+* text=auto eol=lf
+
+# 바이너리 파일은 텍스트 변환에서 제외합니다.
+*.png binary
+*.jpg binary
+*.gif binary
+*.ico binary
+*.pdf binary

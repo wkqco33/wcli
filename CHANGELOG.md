@@ -19,6 +19,9 @@
   - `root --config X sub` 처럼 서브커맨드 앞에 플래그가 온 경우에도 라우팅 수행
   - 플래그 값을 건너뛰며 서브커맨드 위치를 탐색하는 `findSubcommandIndex` 도입
   - `--version`/`--help`/`-h`가 서브커맨드보다 앞에 오면 현재 커맨드가 처리하도록 보장
+- **CI Windows Format check 실패 수정**
+  - `.gitattributes` 추가로 모든 텍스트 파일을 LF 줄바꿈으로 강제
+  - Windows 러너에서 CRLF 체크아웃으로 인해 `gofmt -l`이 모든 파일을 위반으로 판단하던 문제 해결
 
 ## [v0.2.0] - 2026-08-18
 
