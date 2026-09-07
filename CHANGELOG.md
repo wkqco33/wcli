@@ -22,6 +22,9 @@
 - **CI Windows Format check 실패 수정**
   - `.gitattributes` 추가로 모든 텍스트 파일을 LF 줄바꿈으로 강제
   - Windows 러너에서 CRLF 체크아웃으로 인해 `gofmt -l`이 모든 파일을 위반으로 판단하던 문제 해결
+- **`wcli init` Windows 경로 구분자 수정 (`cmd/wcli`)**
+  - 절대 lib-path를 상대 경로로 변환할 때 `filepath.ToSlash` 적용
+  - Windows에서 go.mod replace 경로가 백슬래시(`./vendor\wcli`)로 생성되던 문제 해결
 
 ## [v0.2.0] - 2026-08-18
 

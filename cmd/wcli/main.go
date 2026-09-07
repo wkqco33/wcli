@@ -102,7 +102,9 @@ func buildInitCmd() *wcli.Command {
 				if err != nil {
 					return fmt.Errorf("상대 경로 변환 실패: %w", err)
 				}
-				resolvedPath = "./" + rel
+				// go.mod의 replace 경로는 항상 슬래시 구분자를 사용해야 하므로
+				// Windows 백슬래시를 슬래시로 변환한다.
+				resolvedPath = "./" + filepath.ToSlash(rel)
 			}
 
 			rich.Println("[cyan]프로젝트 초기화 중...[/cyan] (모듈명: %s, 앱명: %s)", modName, appName)
