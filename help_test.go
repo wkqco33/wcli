@@ -1,6 +1,7 @@
 package wcli_test
 
 import (
+	"bytes"
 	"reflect"
 	"strings"
 	"testing"
@@ -72,6 +73,60 @@ func TestSubCommandHelp(t *testing.T) {
 			t.Errorf("Run 없는 루트 실행 후 nil 에러 기대, 실제: %v", err)
 		}
 	})
+}
+
+func TestCommandPath(t *testing.T) {
+	root := &wcli.Command{Use: "ncli"}
+	edit := &wcli.Command{Use: "edit [id]"}
+	ai := &wcli.Command{Use: "ai"}
+	create := &wcli.Command{Use: "create [request...]"}
+	root.AddCommand(edit)
+	root.AddCommand(ai)
+	ai.AddCommand(create)
+
+	tests := []struct {
+		name string
+		cmd  *wcli.Command
+		want string
+	}{
+		{"루트", root, "ncli"},
+		{"1단계 하위", edit, "ncli edit"},
+		{"중간 하위", ai, "ncli ai"},
+		{"2단계 하위", create, "ncli ai create"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.cmd.CommandPath(); got != tt.want {
+				t.Fatalf("CommandPath() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestUsageLineIncludesCommandPath(t *testing.T) {
+	root := &wcli.Command{Use: "ncli"}
+	edit := &wcli.Command{Use: "edit [id]"}
+	root.AddCommand(edit)
+
+	got := edit.UsageLine()
+	if !strings.Contains(got, "ncli edit [id]") {
+		t.Fatalf("UsageLine() = %q, want 전체 경로 포함", got)
+	}
+}
+
+func TestSubCommandHelpShowsFullPath(t *testing.T) {
+	var buf bytes.Buffer
+	root := &wcli.Command{Use: "ncli", Short: "앱", OutWriter: &buf, SilenceErrors: true}
+	edit := &wcli.Command{Use: "edit [id]", Short: "수정"}
+	root.AddCommand(edit)
+
+	if err := root.Execute([]string{"edit", "--help"}); err != nil {
+		t.Fatalf("help 실행 오류: %v", err)
+	}
+	if out := buf.String(); !strings.Contains(out, "ncli edit [id]") {
+		t.Fatalf("도움말에 전체 경로가 없습니다:\n%s", out)
+	}
 }
 
 func TestCommandHooks(t *testing.T) {

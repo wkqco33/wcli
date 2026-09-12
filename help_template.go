@@ -48,7 +48,7 @@ const DefaultHelpTemplate = `{{if .Long}}{{.Long}}{{else}}{{.Short}}{{end}}
 {{end}}
 {{end}}
 {{end}}
-{{if .HasSubCommands}}Use "[cyan]{{cleanUse .Use}} [command] --help[/cyan]" for more information about a command.
+{{if .HasSubCommands}}Use "[cyan]{{.CommandPath}} [command] --help[/cyan]" for more information about a command.
 {{end}}`
 
 var templateCache sync.Map // map[string]*template.Template
@@ -56,6 +56,7 @@ var templateCache sync.Map // map[string]*template.Template
 type helpData struct {
 	Use              string
 	Name             string
+	CommandPath      string
 	Short            string
 	Long             string
 	Version          string
@@ -167,6 +168,7 @@ func buildHelpData(cmd *Command) helpData {
 	data := helpData{
 		Use:            escapeMarkupBrackets(cmd.Use),
 		Name:           cmd.Name(),
+		CommandPath:    escapeMarkupBrackets(cmd.CommandPath()),
 		Short:          cmd.Short,
 		Long:           cmd.Long,
 		Version:        cmd.Version,
